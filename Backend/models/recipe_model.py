@@ -1,13 +1,10 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List
 
-class Ingredient(BaseModel):
+class RecipeOut(BaseModel):
+    id: str
     name: str
-    quantity: str
-
-class Recipe(BaseModel):
-    title: str
     description: str
-    ingredients: List[Ingredient]
-    steps: List[str]
-    tags: Optional[List[str]] = []
+    ingredients: List[str]
+    difficulty: str
+    image_url: str | None = None
