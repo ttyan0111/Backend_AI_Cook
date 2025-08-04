@@ -58,3 +58,47 @@ async def search_dishes(q: str = Query(..., min_length=1)):
             "average_rating": d.get("average_rating", 0.0)
         } for d in dishes
     ]
+
+
+# ================== SEARCH BASED ON ==================
+#lọc món ăn theo thời gian nấu
+from fastapi import Query
+
+@router.get("/filter/by-time", response_model=list[DishOut])
+async def filter_dishes_by_time(
+    max_time: int = Query(..., description="Thời gian nấu tối đa (phút)")
+):
+    cursor = dishes_collection.find({"cooking_time": {"$lte": max_time}})
+    dishes = await cursor.to_list(length=50)
+    return [
+        DishOut(
+            id=str(d.get("_id", "")),
+            name=d.get("name", ""),
+            image_url=d.get("image_url", ""),
+            cooking_time=d.get("cooking_time", 0),
+            average_rating=d.get("average_rating", 0.0),
+        )
+        for d in dishes
+    ]
+
+#lọc món ăn theo rating
+@router.get("/filter/by-time-rating", response_model=list[DishOut])
+async def filter_dishes_by_time_rating(
+    max_time: int = Query(..., description="Thời gian nấu tối đa (phút)"),
+    min_rating: float = Query(0.0, description="Rating tối thiểu")
+):
+    cursor = dishes_collection.find({
+        "cooking_time": {"$lte": max_time},
+        "average_rating": {"$gte": min_rating}
+    })
+    dishes = await cursor.to_list(length=50)
+    return [
+        DishOut(
+            id=str(d.get("_id", "")),
+            name=d.get("name", ""),
+            image_url=d.get("image_url", ""),
+            cooking_time=d.get("cooking_time", 0),
+            average_rating=d.get("average_rating", 0.0),
+        )
+        for d in dishes
+    ]
