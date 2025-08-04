@@ -13,5 +13,4 @@ class UserOut(BaseModel):
     followers: List[str] = []
     following: List[str] = []
     recipes: List[str] = []
-    liked_dishes: List[str] = []
     favorite_dishes: List[str] = []
