@@ -8,9 +8,10 @@ from bson.objectid import ObjectId
 router = APIRouter()
 
 @router.get("/search/ingredients", response_model=list[IngredientOut])
-def search_ingredients(q: str = Query(..., min_length=1)):
+async def search_ingredients(q: str = Query(..., min_length=1)):
     regex = {"$regex": q, "$options": "i"}
-    ingredients = ingredient_collection.find({"name": regex}).limit(10)
+    cursor = ingredient_collection.find({"name": regex}).limit(10)
+    ingredients = await cursor.to_list(length=10)
     return [
         {
             "id": str(i["_id"]),
@@ -21,9 +22,10 @@ def search_ingredients(q: str = Query(..., min_length=1)):
     ]
 
 @router.get("/search/recipes", response_model=list[RecipeOut])
-def search_recipes(q: str = Query(..., min_length=1)):
+async def search_recipes(q: str = Query(..., min_length=1)):
     regex = {"$regex": q, "$options": "i"}
-    recipes = recipe_collection.find({"name": regex}).limit(10)
+    cursor = recipe_collection.find({"name": regex}).limit(10)
+    recipes = await cursor.to_list(length=10)
     return [
         {
             "id": str(r["_id"]),
@@ -36,9 +38,10 @@ def search_recipes(q: str = Query(..., min_length=1)):
     ]
 
 @router.get("/search/users", response_model=list[UserOut])
-def search_users(q: str = Query(..., min_length=1)):
+async def search_users(q: str = Query(..., min_length=1)):
     regex = {"$regex": q, "$options": "i"}
-    users = user_collection.find({"display_name": regex}).limit(10)
+    cursor = user_collection.find({"display_name": regex}).limit(10)
+    users = await cursor.to_list(length=10)
     return [
         {
             "id": str(u["_id"]),

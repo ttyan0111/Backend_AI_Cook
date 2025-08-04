@@ -1,4 +1,0 @@
-MONGO_URI=mongodb+srv://cookadmin:yourStrongPassword123@cook-cluster.abcde.mongodb.net/cook_app?retryWrites=true&w=majority
-JWT_SECRET_KEY=supersecret123
-
-để đây mai test chat
