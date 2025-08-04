@@ -1,7 +1,19 @@
 from fastapi import FastAPI
-from routes import auth_route, recipe_route
+from fastapi.middleware.cors import CORSMiddleware
+
+from routes import user_route, dish_route, recipe_route
 
 app = FastAPI()
 
-app.include_router(auth_route.router)
-app.include_router(recipe_route.router)
+# Add routers
+app.include_router(user_route.router, prefix="/users", tags=["Users"])
+app.include_router(dish_route.router, prefix="/dishes", tags=["Dishes"])
+app.include_router(recipe_route.router, prefix="/recipes", tags=["Recipes"])
+
+# Enable CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)

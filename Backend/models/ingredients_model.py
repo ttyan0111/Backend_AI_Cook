@@ -1,8 +1,16 @@
 from pydantic import BaseModel, Field
-from typing import List
+from typing import Optional
 
+# Model để nhập vào từ client 
+class Ingredient(BaseModel):
+    id: str = Field(alias="_id")
+    name: str
+    category: str  
+    unit: Optional[str] = "gram"  # default unit
+
+# Model để trả về từ API 
 class IngredientOut(BaseModel):
-    id: str = Field(..., example="abc123")
-    name: str = Field(..., example="Beef")
-    category: str = Field(..., example="Meat")
-    aliases: List[str] = Field(default_factory=list, example=["bo", "bò", "beef"])
+    id: str
+    name: str
+    category: str
+    unit: str
