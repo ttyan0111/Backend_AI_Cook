@@ -30,6 +30,7 @@ async def get_user_by_email(user_email: str):
     return user
 
 # POST /users/ dùng tạo mới một user (đăng ký)
+# POST /users/ dùng tạo mới một user (đăng ký)
 @router.post("/", response_model=UserOut)
 async def create_user(user: UserCreate):
     existing_user = await users_collection.find_one({"email": user.email})
@@ -50,7 +51,10 @@ async def create_user(user: UserCreate):
         "following": [],
         "recipes": [],
         "liked_dishes": [],
-        "favorite_dishes": []
+        "favorite_dishes": [],
+        "cooked_dishes": [],        # Thêm dòng này
+        "viewed_dishes": [],        # Thêm dòng này
+        "notifications": []         # Thêm dòng này
     }
 
     result = await users_collection.insert_one(user_data)
@@ -79,29 +83,8 @@ async def get_me(user_email: str = Depends(get_current_user)):
     return user_helper(user)
 
 
-# POST /users/{user_id}/follow dùng để người dùng theo dõi người khác
-@router.post("/{user_id}/follow")
-async def follow_user(user_id: str, current_email: str = Depends(get_current_user)):
-    if not ObjectId.is_valid(user_id):
-        raise HTTPException(status_code=400, detail="Invalid user ID")
 
-    user_to_follow = await users_collection.find_one({"_id": ObjectId(user_id)})
-    current_user = await get_user_by_email(current_email)
 
-    if not user_to_follow or not current_user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    if current_user["_id"] == user_to_follow["_id"]:
-        raise HTTPException(status_code=400, detail="You cannot follow yourself")
-
-    await users_collection.update_one(
-        {"_id": current_user["_id"]}, {"$addToSet": {"following": user_to_follow["_id"]}}
-    )
-    await users_collection.update_one(
-        {"_id": user_to_follow["_id"]}, {"$addToSet": {"followers": current_user["_id"]}}
-    )
-
-    return {"msg": f"You are now following {user_to_follow['display_id']}"}
 
 
 # ================== FOLLOW & SOCIAL ==================
@@ -164,25 +147,43 @@ async def change_password(
 
 
 # ================== COOKED HISTORY ==================
+MAX_HISTORY = 50
+
+# Thêm món vào lịch sử đã nấu
 @router.post("/me/cooked/{dish_id}")
 async def add_cooked_dish(dish_id: str, user_email: str = Depends(get_current_user)):
     user = await users_collection.find_one({"email": user_email})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    cooked = user.get("cooked_dishes", [])
+    if dish_id in cooked:
+        return {"msg": "Dish already in cooked history"}
+    if len(cooked) >= MAX_HISTORY:
+        cooked = cooked[1:]  # Xóa món cũ nhất
+    cooked.append(dish_id)
     await users_collection.update_one(
         {"_id": user["_id"]},
-        {"$addToSet": {"cooked_dishes": dish_id}}
+        {"$set": {"cooked_dishes": cooked}}
     )
     return {"msg": "Dish added to cooked history"}
 
-@router.get("/me/cooked", response_model=List[str])
-async def get_cooked_history(user_email: str = Depends(get_current_user)):
+# Thêm món vào lịch sử đã xem
+@router.post("/me/viewed/{dish_id}")
+async def add_viewed_dish(dish_id: str, user_email: str = Depends(get_current_user)):
     user = await users_collection.find_one({"email": user_email})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return user.get("cooked_dishes", [])
-
-
+    viewed = user.get("viewed_dishes", [])
+    if dish_id in viewed:
+        return {"msg": "Dish already in viewed history"}
+    if len(viewed) >= MAX_HISTORY:
+        viewed = viewed[1:]  # Xóa món cũ nhất
+    viewed.append(dish_id)
+    await users_collection.update_one(
+        {"_id": user["_id"]},
+        {"$set": {"viewed_dishes": viewed}}
+    )
+    return {"msg": "Dish added to viewed history"}
 # ================== REMINDERS & NOTIFICATIONS ==================
 # Đặt thời gian nhắc nhở
 @router.post("/me/reminders")
@@ -207,7 +208,7 @@ async def get_reminders(user_email: str = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="User not found")
     return user.get("reminders", [])
 
-
+# POST /users/{user_id}/follow dùng để người dùng theo dõi người khác
 @router.post("/{user_id}/follow")
 async def follow_user(user_id: str, current_email: str = Depends(get_current_user)):
     if not ObjectId.is_valid(user_id):
@@ -257,3 +258,4 @@ async def notify_favorite(dish_id: str):
             {"$push": {"notifications": f"Món ăn '{dish['name']}' của bạn đã nhận được {favorite_count} lượt thả tim!"}}
         )
     return {"msg": "Notification sent if milestone reached"}
+

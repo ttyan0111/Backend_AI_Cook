@@ -26,8 +26,8 @@ class Recipe(BaseModel):
 
     class Config:
         arbitrary_types_allowed = True
-        allow_population_by_field_name = True
-        schema_extra = {
+        validate_by_name = True
+        json_schema_extra = {
             "example": {
                 "name": "Fried Rice",
                 "description": "A quick and tasty dish.",
@@ -60,6 +60,6 @@ class RecipeOut(BaseModel):
         return v
 
     class Config:
-        allow_population_by_field_name = True
+        validate_by_name = True
         arbitrary_types_allowed = True
         json_encoders = {ObjectId: str}

@@ -1,11 +1,65 @@
 from fastapi import APIRouter, HTTPException, Depends
 from models.dish_model import Dish, DishOut, DishIn
-from database.mongo import dishes_collection, users_collection
+from models.dish_with_recipe_model import DishWithRecipeIn, DishWithRecipeOut
+from database.mongo import dishes_collection, users_collection, recipe_collection
 from bson import ObjectId
 from datetime import datetime
 from routes.user_route import get_current_user, get_user_by_email
 
 router = APIRouter()
+
+# Tạo món ăn và recipe cùng lúc
+@router.post("/with-recipe", response_model=DishWithRecipeOut)
+async def create_dish_with_recipe(data: DishWithRecipeIn, user_email: str = Depends(get_current_user)):
+    user = await get_user_by_email(user_email)
+    
+    # Tạo dish trước
+    dish_data = {
+        "name": data.name,
+        "image_url": data.image_url,
+        "ingredients": data.ingredients,
+        "cooking_time": data.cooking_time,
+        "ratings": [],
+        "average_rating": 0.0,
+        "liked_by": [],
+        "created_at": datetime.utcnow(),
+        "creator_id": str(user["_id"])
+    }
+    
+    dish_result = await dishes_collection.insert_one(dish_data)
+    if not dish_result.inserted_id:
+        raise HTTPException(status_code=500, detail="Failed to create dish")
+    
+    dish_id = str(dish_result.inserted_id)
+    
+    # Tạo recipe với dish_id vừa tạo
+    recipe_data = {
+        "name": data.recipe_name or f"Cách làm {data.name}",
+        "description": data.recipe_description,
+        "ingredients": data.recipe_ingredients or data.ingredients,
+        "difficulty": data.difficulty,
+        "image_url": data.image_url,
+        "instructions": data.instructions,
+        "dish_id": dish_id,
+        "created_by": user_email,
+        "ratings": [],
+        "average_rating": 0.0
+    }
+    
+    recipe_result = await recipe_collection.insert_one(recipe_data)
+    if not recipe_result.inserted_id:
+        # Nếu tạo recipe thất bại, xóa dish đã tạo
+        await dishes_collection.delete_one({"_id": dish_result.inserted_id})
+        raise HTTPException(status_code=500, detail="Failed to create recipe")
+    
+    recipe_id = str(recipe_result.inserted_id)
+    
+    return DishWithRecipeOut(
+        dish_id=dish_id,
+        recipe_id=recipe_id,
+        dish_name=data.name,
+        recipe_name=recipe_data["name"]
+    )
 
 # Tạo món ăn mới
 @router.post("/", response_model=DishOut)

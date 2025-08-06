@@ -1,0 +1,42 @@
+[
+  {
+    "email": "chef1@example.com",
+    "password": "password123",
+    "display_id": "chef_anna"
+  },
+  {
+    "email": "chef2@example.com", 
+    "password": "password123",
+    "display_id": "master_chef_duc"
+  },
+  {
+    "email": "chef3@example.com",
+    "password": "password123", 
+    "display_id": "home_cook_linh"
+  },
+  {
+    "email": "foodlover1@example.com",
+    "password": "password123",
+    "display_id": "food_explorer"
+  },
+  {
+    "email": "foodlover2@example.com",
+    "password": "password123",
+    "display_id": "taste_tester"
+  },
+  {
+    "email": "student@example.com",
+    "password": "password123",
+    "display_id": "hungry_student"
+  },
+  {
+    "email": "parent@example.com",
+    "password": "password123",
+    "display_id": "family_chef"
+  },
+  {
+    "email": "beginner@example.com",
+    "password": "password123",
+    "display_id": "cooking_newbie"
+  }
+]

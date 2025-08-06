@@ -1,28 +1,27 @@
 from fastapi import APIRouter, Depends, HTTPException
-from models.recipe_model import Recipe, RecipeOut
+from models.recipe_model import RecipeIn, RecipeOut
 from database.mongo import recipe_collection
-from utils.auth_helper import get_current_user
+from routes.user_route import get_current_user
 from bson import ObjectId
 from typing import List
 from database.mongo import recipe_collection, users_collection
 
-router = APIRouter(prefix="/recipes", tags=["Recipes"])
+router = APIRouter()
 
 # Tạo công thức mới
 @router.post("/", response_model=RecipeOut)
-async def create_recipe(recipe: Recipe, user_email: str = Depends(get_current_user)):
+async def create_recipe(recipe: RecipeIn, user_email: str = Depends(get_current_user)):
     # Lấy user để lấy _id
     user = await users_collection.find_one({"email": user_email})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     recipe_dict = recipe.dict()
-    recipe_dict["created_by"] = str(user["_id"])  # Lưu _id thay vì email
     recipe_dict["ratings"] = []
     recipe_dict["average_rating"] = 0.0
 
     result = await recipe_collection.insert_one(recipe_dict)
     recipe_dict["_id"] = result.inserted_id
-    return RecipeOut(id=str(result.inserted_id), **recipe.dict(), average_rating=0.0, created_by=str(user["_id"]))
+    return RecipeOut(id=str(result.inserted_id), **recipe.dict(), average_rating=0.0)
 
 # Lấy công thức theo ID
 @router.get("/{recipe_id}", response_model=RecipeOut)

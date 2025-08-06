@@ -1,4 +1,4 @@
-def user_helper(user: dict) -> dict:
+def user_helper(user) -> dict:
     return {
         "id": str(user["_id"]),
         "email": user["email"],
@@ -6,6 +6,8 @@ def user_helper(user: dict) -> dict:
         "followers": user.get("followers", []),
         "following": user.get("following", []),
         "recipes": user.get("recipes", []),
-        "liked_dishes": user.get("liked_dishes", []),
-        "favorite_dishes": user.get("favorite_dishes", [])
+        "favorite_dishes": user.get("favorite_dishes", []),
+        "cooked_dishes": user.get("cooked_dishes", []),
+        "viewed_dishes": user.get("viewed_dishes", []),
+        "notifications": user.get("notifications", [])
     }

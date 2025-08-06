@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field 
 from typing import List, Optional
 
 class UserCreate(BaseModel):
@@ -14,5 +14,6 @@ class UserOut(BaseModel):
     following: List[str] = []
     recipes: List[str] = []
     favorite_dishes: List[str] = []
-    cooked_dishes: List[str] = [] 
+    cooked_dishes: List[str] = []
+    viewed_dishes: List[str] = []     
     notifications: List[str] = []

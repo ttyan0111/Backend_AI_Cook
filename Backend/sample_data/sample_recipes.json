@@ -1,0 +1,210 @@
+[
+  {
+    "name": "Cách làm Cơm chiên trứng",
+    "description": "Món cơm chiên trứng đơn giản, nhanh gọn cho bữa sáng",
+    "ingredients": ["Cơm nguội", "Trứng gà", "Hành lá", "Dầu ăn", "Nước mắm", "Tiêu"],
+    "difficulty": "easy",
+    "image_url": "https://images.unsplash.com/photo-1603133872878-684f208fb84b",
+    "instructions": [
+      "Đập trứng vào bát, đánh đều với chút muối tiêu",
+      "Bắc chảo lên bếp, cho dầu vào làm nóng",
+      "Đổ trứng vào chiên sơ, xới ra",
+      "Cho cơm vào đảo đều với trứng",
+      "Nêm nước mắm, tiêu vừa ăn",
+      "Rắc hành lá lên trên và tắt bếp"
+    ],
+    "dish_id": "DISH_ID_1",
+    "created_by": "chef1@example.com",
+    "ratings": [4, 5, 4, 5],
+    "average_rating": 4.5
+  },
+  {
+    "name": "Cách nấu Phở bò truyền thống",
+    "description": "Công thức phở bò Hà Nội chính gốc với nước dùng thơm ngon",
+    "ingredients": ["Xương bò", "Thịt bò", "Bánh phở", "Hành tây", "Gừng", "Quế", "Hồi", "Đinh hương"],
+    "difficulty": "hard",
+    "image_url": "https://images.unsplash.com/photo-1555126634-323283e090fa",
+    "instructions": [
+      "Ninh xương bò 2-3 tiếng để lấy nước dùng",
+      "Nướng hành tây, gừng thơm",
+      "Cho gia vị vào túi vải, thả vào nồi",
+      "Luộc thịt bò riêng, thái mỏng",
+      "Trụng bánh phở qua nước sôi",
+      "Bày bánh phở, thịt vào tô",
+      "Chan nước dùng nóng lên trên",
+      "Ăn kèm với rau thơm, chanh"
+    ],
+    "dish_id": "DISH_ID_2",
+    "created_by": "chef2@example.com",
+    "ratings": [5, 5, 4, 5, 4],
+    "average_rating": 4.6
+  },
+  {
+    "name": "Bún bò Huế đậm đà",
+    "description": "Bún bò Huế cay nồng đặc trưng miền Trung",
+    "ingredients": ["Bún", "Xương heo", "Thịt bò", "Chả cua", "Ớt", "Mắm ruốc", "Sả"],
+    "difficulty": "medium",
+    "image_url": "https://images.unsplash.com/photo-1559847844-d558cfc85e92",
+    "instructions": [
+      "Ninh xương heo lấy nước dùng trong",
+      "Xào ớt với mắm ruốc thơm",
+      "Cho nước dùng vào nồi, nêm vị",
+      "Luộc thịt bò, chả cua",
+      "Trụng bún qua nước sôi",
+      "Bày bún vào tô, xếp thịt lên",
+      "Chan nước dùng đỏ cay nồng",
+      "Ăn kèm rau sống"
+    ],
+    "dish_id": "DISH_ID_3",
+    "created_by": "chef1@example.com",
+    "ratings": [4, 4, 5, 4],
+    "average_rating": 4.25
+  },
+  {
+    "name": "Gỏi cuốn tôm thịt",
+    "description": "Gỏi cuốn tươi mát với tôm và thịt heo",
+    "ingredients": ["Bánh tráng", "Tôm", "Thịt heo luộc", "Bún tươi", "Rau sống", "Nước mắm"],
+    "difficulty": "easy",
+    "image_url": "https://images.unsplash.com/photo-1594007654729-407eedc4be65",
+    "instructions": [
+      "Luộc tôm, thịt heo chín tái",
+      "Thái tôm đôi, thịt thái lát mỏng", 
+      "Nhúng bánh tráng qua nước ấm",
+      "Trải bánh tráng, đặt rau lên",
+      "Thêm bún, tôm, thịt vào giữa",
+      "Cuốn chặt từ dưới lên trên",
+      "Cắt đôi, xếp đĩa",
+      "Pha nước chấm chua ngọt"
+    ],
+    "dish_id": "DISH_ID_4",
+    "created_by": "chef3@example.com",
+    "ratings": [4, 5, 4],
+    "average_rating": 4.33
+  },
+  {
+    "name": "Bánh mì thịt nướng Sài Gòn",
+    "description": "Bánh mì Việt Nam với thịt nướng thơm lừng",
+    "ingredients": ["Bánh mì", "Thịt heo", "Pate", "Dưa chua", "Cà rốt", "Rau thơm"],
+    "difficulty": "medium",
+    "image_url": "https://images.unsplash.com/photo-1598300042247-d088f8ab3a91",
+    "instructions": [
+      "Ướp thịt với gia vị, để 30 phút",
+      "Nướng thịt trên than hoa",
+      "Cắt bánh mì dọc, không cắt đứt",
+      "Phết pate lên bánh mì",
+      "Kẹp thịt nướng vào giữa",
+      "Thêm dưa chua, cà rốt",
+      "Rắc rau thơm lên trên",
+      "Ăn nóng khi vừa làm xong"
+    ],
+    "dish_id": "DISH_ID_5",
+    "created_by": "chef2@example.com",
+    "ratings": [5, 4, 5, 4, 5],
+    "average_rating": 4.6
+  },
+  {
+    "name": "Canh chua cá đồng",
+    "description": "Canh chua miền Nam với cá tươi ngon",
+    "ingredients": ["Cá lóc", "Me", "Cà chua", "Thơm", "Đậu bắp", "Ngò gai"],
+    "difficulty": "easy",
+    "image_url": "https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b",
+    "instructions": [
+      "Rửa sạch cá, cắt khúc vừa ăn",
+      "Nấu nước me, lọc lấy nước trong",
+      "Cho cà chua vào xào thơm",
+      "Đổ nước me vào, đun sôi",
+      "Cho cá vào nấu chín",
+      "Thêm thơm, đậu bắp",
+      "Nêm vị chua ngọt vừa ăn",
+      "Rắc ngò gai lên trên"
+    ],
+    "dish_id": "DISH_ID_6",
+    "created_by": "chef1@example.com",
+    "ratings": [4, 4, 4, 5],
+    "average_rating": 4.25
+  },
+  {
+    "name": "Thịt kho tàu truyền thống",
+    "description": "Thịt kho nước dừa đậm đà cho ngày mưa",
+    "ingredients": ["Thịt ba chỉ", "Trứng", "Nước dừa", "Nước mắm", "Đường phèn", "Tỏi"],
+    "difficulty": "medium",
+    "image_url": "https://images.unsplash.com/photo-1565299507177-b0ac66763828",
+    "instructions": [
+      "Cắt thịt thành miếng vuông",
+      "Luộc trứng chín, bóc vỏ",
+      "Làm caramel từ đường phèn",
+      "Cho thịt vào rim với caramel",
+      "Đổ nước dừa vào, đun nhỏ lửa",
+      "Cho trứng vào kho cùng",
+      "Kho đến khi nước cạn, thịt mềm",
+      "Ăn với cơm trắng nóng"
+    ],
+    "dish_id": "DISH_ID_7",
+    "created_by": "chef3@example.com",
+    "ratings": [5, 5, 4, 5],
+    "average_rating": 4.75
+  },
+  {
+    "name": "Chả cá Lã Vọng Hà Nội",
+    "description": "Đặc sản chả cá nổi tiếng phố cổ Hà Nội",
+    "ingredients": ["Cá lăng", "Nghệ", "Bún tươi", "Thì là", "Hành", "Mắm tôm"],
+    "difficulty": "medium",
+    "image_url": "https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b",
+    "instructions": [
+      "Cắt cá thành miếng dài",
+      "Ướp cá với nghệ, gia vị",
+      "Để cá thấm gia vị 2 giờ",
+      "Nướng cá trên bếp than",
+      "Thái hành, rửa thì là",
+      "Bày bún ra đĩa lớn",
+      "Đặt cá nướng lên trên",
+      "Ăn kèm mắm tôm pha chanh"
+    ],
+    "dish_id": "DISH_ID_8",
+    "created_by": "chef2@example.com",
+    "ratings": [4, 5, 4, 4],
+    "average_rating": 4.25
+  },
+  {
+    "name": "Nem rán giòn rụm",
+    "description": "Nem rán Hà Nội truyền thống giòn tan",
+    "ingredients": ["Bánh đa nem", "Thịt băm", "Nấm mèo", "Hành tây", "Cà rốt", "Trứng"],
+    "difficulty": "medium",
+    "image_url": "https://images.unsplash.com/photo-1559847844-d558cfc85e92",
+    "instructions": [
+      "Trộn thịt băm với nấm thái nhỏ",
+      "Thêm hành tây, cà rốt băm",
+      "Nêm gia vị, trộn đều",
+      "Gói nhân vào bánh đa nem",
+      "Quết trứng lên mép bánh",
+      "Cuốn chặt, dán kín miệng",
+      "Chiên ngập dầu đến vàng",
+      "Ăn nóng với rau sống"
+    ],
+    "dish_id": "DISH_ID_9",
+    "created_by": "chef1@example.com",
+    "ratings": [4, 4, 5, 4, 5],
+    "average_rating": 4.4
+  },
+  {
+    "name": "Mì Quảng đặc sản",
+    "description": "Mì Quảng Quảng Nam đậm đà hương vị",
+    "ingredients": ["Mì Quảng", "Tôm", "Thịt heo", "Trứng cút", "Rau muống", "Bánh tráng"],
+    "difficulty": "hard",
+    "image_url": "https://images.unsplash.com/photo-1555939594-58d7cb561ad1",
+    "instructions": [
+      "Nấu nước dùng từ xương heo",
+      "Xào tôm, thịt thơm",
+      "Luộc trứng cút",
+      "Trụng mì qua nước sôi",
+      "Cho mì vào tô",
+      "Xếp tôm, thịt, trứng lên",
+      "Chan ít nước dùng",
+      "Ăn kèm bánh tráng nướng"
+    ],
+    "dish_id": "DISH_ID_10",
+    "created_by": "chef3@example.com",
+    "ratings": [5, 4, 5, 5],
+    "average_rating": 4.75
+  }
+]
