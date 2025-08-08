@@ -4,13 +4,14 @@ from models.dish_with_recipe_model import DishWithRecipeIn, DishWithRecipeOut
 from database.mongo import dishes_collection, users_collection, recipe_collection
 from bson import ObjectId
 from datetime import datetime
-from routes.user_route import get_current_user, get_user_by_email
+from core.auth.dependencies import get_current_user, get_user_by_email, extract_user_email
 
 router = APIRouter()
 
 # Tạo món ăn và recipe cùng lúc
 @router.post("/with-recipe", response_model=DishWithRecipeOut)
-async def create_dish_with_recipe(data: DishWithRecipeIn, user_email: str = Depends(get_current_user)):
+async def create_dish_with_recipe(data: DishWithRecipeIn, decoded=Depends(get_current_user)):
+    user_email = extract_user_email(decoded)
     user = await get_user_by_email(user_email)
     
     # Tạo dish trước
@@ -63,7 +64,8 @@ async def create_dish_with_recipe(data: DishWithRecipeIn, user_email: str = Depe
 
 # Tạo món ăn mới
 @router.post("/", response_model=DishOut)
-async def create_dish(dish: DishIn, user_email: str = Depends(get_current_user)):
+async def create_dish(dish: DishIn, decoded=Depends(get_current_user)):
+    user_email = extract_user_email(decoded)
     user = await get_user_by_email(user_email)
     new_dish = dish.dict()
     new_dish["created_at"] = datetime.utcnow()
@@ -99,7 +101,8 @@ async def get_dishes():
 # ================== RATING & FAV ==================
 ##cho ng dùng đánh giá món ăn
 @router.post("/{dish_id}/rate")
-async def rate_dish(dish_id: str, rating: int, user_email: str = Depends(get_current_user)):
+async def rate_dish(dish_id: str, rating: int, decoded=Depends(get_current_user)):
+    user_email = extract_user_email(decoded)
     if rating < 1 or rating > 5:
         raise HTTPException(status_code=400, detail="Rating must be 1-5")
     dish = await dishes_collection.find_one({"_id": ObjectId(dish_id)})
@@ -116,7 +119,8 @@ async def rate_dish(dish_id: str, rating: int, user_email: str = Depends(get_cur
 
 ##người dùng thả tim vào 1 món ăn -> favorite
 @router.post("/{dish_id}/favorite")
-async def favorite_dish(dish_id: str, user_email: str = Depends(get_current_user)):
+async def favorite_dish(dish_id: str, decoded=Depends(get_current_user)):
+    user_email = extract_user_email(decoded)
     user = await users_collection.find_one({"email": user_email})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")

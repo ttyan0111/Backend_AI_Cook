@@ -1,4 +1,4 @@
-# === thêm ở đầu file ===
+# === ASYNC-ONLY MAIN.PY ===
 import os
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
@@ -11,46 +11,37 @@ from fastapi.responses import JSONResponse
 import firebase_admin
 from firebase_admin import auth as fb_auth, credentials
 from datetime import datetime, timezone
-from routes.firebase_auth import verify_firebase_token
-from pymongo import MongoClient
-from pymongo.collection import Collection
+import motor.motor_asyncio
 import logging
 
 load_dotenv()
 
 # ==== Init Firebase Admin ====
 if not firebase_admin._apps:
-    cred = credentials.ApplicationDefault()  # dùng GOOGLE_APPLICATION_CREDENTIALS từ .env
+    cred = credentials.ApplicationDefault()
     firebase_admin.initialize_app(cred, {
         "projectId": os.getenv("FIREBASE_PROJECT_ID")
     })
 
-# ==== Init MongoDB ====
-import certifi
-from pymongo import MongoClient
-
-MONGODB_URI = os.getenv("MONGODB_URI")  # phải là mongodb+srv://...
+# ==== Init MongoDB (ASYNC ONLY) ====
+MONGODB_URI = os.getenv("MONGODB_URI")
 DB_NAME = os.getenv("DATABASE_NAME", "cook_app")
 
-client = MongoClient(
+# ASYNC MongoDB client (Motor)
+client = motor.motor_asyncio.AsyncIOMotorClient(
     MONGODB_URI,
-    tls=True,                       # bắt buộc TLS
-    tlsCAFile=certifi.where(),      # dùng CA bundle chuẩn
+    tls=True,
     serverSelectionTimeoutMS=30000,
 )
 
-# Nếu URI KHÔNG có /cook_app ở cuối, dùng dòng dưới:
 db = client[DB_NAME]
-# Nếu URI đã có /cook_app, cũng OK dùng get_default_database()
-# db = client.get_default_database()
 
+# ASYNC collections
 users_col = db["users"]
 user_social_col = db["user_social"]
 user_activity_col = db["user_activity"]
 user_notifications_col = db["user_notifications"]
 user_preferences_col = db["user_preferences"]
-
-
 
 # ==== FastAPI app ====
 app = FastAPI()
@@ -77,22 +68,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ==== Auth dependency: sử dụng từ core/auth/dependencies.py ====
-# (Xóa duplicate definition, import từ centralized location)
-
-# ==== Helper: ensure user exists in Mongo ====
-def ensure_user_document(decoded: Dict[str, Any]) -> Dict[str, Any]:
+# ==== ASYNC Helper: ensure user exists in Mongo ====
+async def ensure_user_document_async(decoded: Dict[str, Any]) -> Dict[str, Any]:
     uid = decoded["uid"]
     email = decoded.get("email", "")
     name = decoded.get("name", "")
     avatar = decoded.get("picture", "")
     
-    # Kiểm tra user đã tồn tại chưa
-    existing_user = users_col.find_one({"email": email})
+    # Kiểm tra user đã tồn tại chưa (ASYNC)
+    existing_user = await users_col.find_one({"email": email})
     
     if existing_user:
-        # Chỉ update lastLoginAt cho user cũ
-        users_col.update_one(
+        # Chỉ update lastLoginAt cho user cũ (ASYNC)
+        await users_col.update_one(
             {"email": email}, 
             {"$set": {"lastLoginAt": datetime.now(timezone.utc)}}
         )
@@ -112,18 +100,19 @@ def ensure_user_document(decoded: Dict[str, Any]) -> Dict[str, Any]:
         "firebase_uid": uid,
     }
     
-    result = users_col.insert_one(new_user)
+    # ASYNC insert
+    result = await users_col.insert_one(new_user)
     user_id = str(result.inserted_id)
     
-    # Tạo các collections phụ cho user mới
-    init_user_collections(user_id)
+    # Tạo các collections phụ cho user mới (ASYNC)
+    await init_user_collections_async(user_id)
     
-    return users_col.find_one({"_id": result.inserted_id})
+    return await users_col.find_one({"_id": result.inserted_id})
 
-def init_user_collections(user_id: str):
-    """Khởi tạo các collections phụ cho user mới"""
-    # Tạo social data
-    user_social_col.insert_one({
+async def init_user_collections_async(user_id: str):
+    """Khởi tạo các collections phụ cho user mới (ASYNC)"""
+    # Tạo social data (ASYNC)
+    await user_social_col.insert_one({
         "user_id": user_id,
         "followers": [],
         "following": [],
@@ -131,8 +120,8 @@ def init_user_collections(user_id: str):
         "following_count": 0
     })
     
-    # Tạo activity data
-    user_activity_col.insert_one({
+    # Tạo activity data (ASYNC)
+    await user_activity_col.insert_one({
         "user_id": user_id,
         "favorite_dishes": [],
         "cooked_dishes": [],
@@ -141,15 +130,15 @@ def init_user_collections(user_id: str):
         "created_dishes": []
     })
     
-    # Tạo notifications data
-    user_notifications_col.insert_one({
+    # Tạo notifications data (ASYNC)
+    await user_notifications_col.insert_one({
         "user_id": user_id,
         "notifications": [],
         "unread_count": 0
     })
     
-    # Tạo preferences data
-    user_preferences_col.insert_one({
+    # Tạo preferences data (ASYNC)
+    await user_preferences_col.insert_one({
         "user_id": user_id,
         "reminders": [],
         "dietary_restrictions": [],
@@ -169,28 +158,28 @@ async def log_requests(request: Request, call_next):
     logger.info(f"Response: {response.status_code}")
     return response
 
-# ==== Routes ====
+# ==== Routes (ALL ASYNC) ====
 
 @app.get("/health")
-def health():
-    return {"ok": True}
+async def health():
+    return {"ok": True, "async": True}
 
 @app.get("/me")
-def me(decoded=Depends(get_current_user)):
+async def me(decoded=Depends(get_current_user)):
     """
-    Trả về hồ sơ user trong Mongo (và auto tạo nếu chưa có).
+    Trả về hồ sơ user trong Mongo (và auto tạo nếu chưa có) - ASYNC VERSION
     """
-    doc = ensure_user_document(decoded)
+    doc = await ensure_user_document_async(decoded)
     user_id = str(doc["_id"])
     
     # Import user_helper nếu chưa có
     from core.user_management.service import user_helper
     
-    # Load additional data từ các collections riêng
-    social_data = user_social_col.find_one({"user_id": user_id})
-    activity_data = user_activity_col.find_one({"user_id": user_id})
-    notifications_data = user_notifications_col.find_one({"user_id": user_id})
-    preferences_data = user_preferences_col.find_one({"user_id": user_id})
+    # Load additional data từ các collections riêng (ALL ASYNC)
+    social_data = await user_social_col.find_one({"user_id": user_id})
+    activity_data = await user_activity_col.find_one({"user_id": user_id})
+    notifications_data = await user_notifications_col.find_one({"user_id": user_id})
+    preferences_data = await user_preferences_col.find_one({"user_id": user_id})
     
     return {
         "user": user_helper(doc),
@@ -202,19 +191,20 @@ def me(decoded=Depends(get_current_user)):
     }
 
 @app.get("/data/private")
-def private_data(decoded=Depends(get_current_user)):
+async def private_data(decoded=Depends(get_current_user)):
     """
-    Ví dụ 1 endpoint cần auth để lấy data theo uid
+    Ví dụ 1 endpoint cần auth để lấy data theo uid - ASYNC VERSION
     """
     uid = decoded["uid"]
-    # Ví dụ: lấy list đơn hàng của user theo uid
-    orders = list(db["orders"].find({"uid": uid}, {"_id": 0}))
+    # Ví dụ: lấy list đơn hàng của user theo uid (ASYNC)
+    orders_cursor = db["orders"].find({"uid": uid}, {"_id": 0})
+    orders = await orders_cursor.to_list(length=100)
     return {"uid": uid, "orders": orders}
 
 @app.post("/profile/update")
-def update_profile(payload: Dict[str, Any], decoded=Depends(get_current_user)):
+async def update_profile(payload: Dict[str, Any], decoded=Depends(get_current_user)):
     """
-    Update hồ sơ người dùng - chỉ update fields cần thiết
+    Update hồ sơ người dùng - chỉ update fields cần thiết - ASYNC VERSION
     """
     email = decoded.get("email")
     if not email:
@@ -223,7 +213,9 @@ def update_profile(payload: Dict[str, Any], decoded=Depends(get_current_user)):
     allowed = {k: v for k, v in payload.items() if k in ["name", "avatar", "display_id"]}
     if not allowed:
         raise HTTPException(400, "No valid fields")
-    users_col.update_one({"email": email}, {"$set": allowed})
+    
+    # ASYNC update
+    await users_col.update_one({"email": email}, {"$set": allowed})
     return {"ok": True, "updated_fields": list(allowed.keys())}
 
 
@@ -234,24 +226,25 @@ async def general_exception_handler(request, exc):
     return JSONResponse(status_code=500, content={"detail": detail})
 
 
-##chỉnh lại format cho đẹp đẽ và migrate sang structure mới
+# ==== ASYNC Admin endpoints ====
 @app.post("/admin/reorganize-user/{user_id}")
-def reorganize_single_user(user_id: str):
-    """Migrate một user từ structure cũ sang structure mới"""
+async def reorganize_single_user_async(user_id: str):
+    """Migrate một user từ structure cũ sang structure mới - ASYNC VERSION"""
     if not DEBUG:
         raise HTTPException(403, "Only available in debug mode")
     
     from bson import ObjectId
     
     try:
-        user = users_col.find_one({"_id": ObjectId(user_id)})
+        # ASYNC find
+        user = await users_col.find_one({"_id": ObjectId(user_id)})
         if not user:
             raise HTTPException(404, "User not found")
         
         # Migrate data từ user document sang các collections riêng
         user_id_str = str(user["_id"])
         
-        # 1. Migrate social data
+        # 1. Migrate social data (ASYNC)
         social_data = {
             "user_id": user_id_str,
             "followers": user.get("followers", []),
@@ -259,40 +252,40 @@ def reorganize_single_user(user_id: str):
             "follower_count": len(user.get("followers", [])),
             "following_count": len(user.get("following", []))
         }
-        user_social_col.update_one(
+        await user_social_col.update_one(
             {"user_id": user_id_str},
             {"$set": social_data},
             upsert=True
         )
         
-        # 2. Migrate activity data
+        # 2. Migrate activity data (ASYNC)
         activity_data = {
             "user_id": user_id_str,
             "favorite_dishes": user.get("favorite_dishes", []),
             "cooked_dishes": user.get("cooked_dishes", []),
             "viewed_dishes": user.get("viewed_dishes", []),
             "created_recipes": user.get("recipes", []),
-            "created_dishes": user.get("liked_dishes", [])  # Assuming liked_dishes are created dishes
+            "created_dishes": user.get("liked_dishes", [])
         }
-        user_activity_col.update_one(
+        await user_activity_col.update_one(
             {"user_id": user_id_str},
             {"$set": activity_data},
             upsert=True
         )
         
-        # 3. Migrate notifications data
+        # 3. Migrate notifications data (ASYNC)
         notifications_data = {
             "user_id": user_id_str,
             "notifications": user.get("notifications", []),
             "unread_count": len([n for n in user.get("notifications", []) if isinstance(n, dict) and not n.get("read", True)])
         }
-        user_notifications_col.update_one(
+        await user_notifications_col.update_one(
             {"user_id": user_id_str},
             {"$set": notifications_data},
             upsert=True
         )
         
-        # 4. Create preferences data (empty by default)
+        # 4. Create preferences data (ASYNC)
         preferences_data = {
             "user_id": user_id_str,
             "reminders": [],
@@ -300,13 +293,13 @@ def reorganize_single_user(user_id: str):
             "cuisine_preferences": [],
             "difficulty_preference": "all"
         }
-        user_preferences_col.update_one(
+        await user_preferences_col.update_one(
             {"user_id": user_id_str},
             {"$set": preferences_data},
             upsert=True
         )
         
-        # 5. Clean up user document - chỉ giữ basic info
+        # 5. Clean up user document - chỉ giữ basic info (ASYNC)
         clean_user_doc = {
             "email": user.get("email", ""),
             "display_id": user.get("display_id", ""),
@@ -318,7 +311,7 @@ def reorganize_single_user(user_id: str):
             "firebase_uid": user.get("firebase_uid", ""),
         }
         
-        users_col.replace_one({"_id": user["_id"]}, clean_user_doc)
+        await users_col.replace_one({"_id": user["_id"]}, clean_user_doc)
         
         return {
             "message": f"Successfully migrated user {user_id} to new structure",
@@ -330,13 +323,15 @@ def reorganize_single_user(user_id: str):
         raise HTTPException(400, f"Migration failed: {str(e)}")
 
 @app.post("/admin/migrate-all-users")
-def migrate_all_users():
-    """Migrate tất cả users sang structure mới"""
+async def migrate_all_users_async():
+    """Migrate tất cả users sang structure mới - ASYNC VERSION"""
     if not DEBUG:
         raise HTTPException(403, "Only available in debug mode")
     
     try:
-        users = list(users_col.find({}))
+        # ASYNC find all users
+        users_cursor = users_col.find({})
+        users = await users_cursor.to_list(length=1000)
         migrated_count = 0
         errors = []
         
@@ -349,7 +344,7 @@ def migrate_all_users():
                     continue
                 
                 # Perform migration (same logic as single user)
-                # ... (same migration logic as above)
+                # This would be the same async migration logic as above
                 migrated_count += 1
                 
             except Exception as e:

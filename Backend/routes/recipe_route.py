@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from models.recipe_model import RecipeIn, RecipeOut
 from database.mongo import recipe_collection
-from routes.user_route import get_current_user
+from core.auth.dependencies import get_current_user, extract_user_email, get_user_by_email
 from bson import ObjectId
 from typing import List
 from database.mongo import recipe_collection, users_collection
@@ -10,7 +10,8 @@ router = APIRouter()
 
 # Tạo công thức mới
 @router.post("/", response_model=RecipeOut)
-async def create_recipe(recipe: RecipeIn, user_email: str = Depends(get_current_user)):
+async def create_recipe(recipe: RecipeIn, decoded=Depends(get_current_user)):
+    user_email = extract_user_email(decoded)
     # Lấy user để lấy _id
     user = await users_collection.find_one({"email": user_email})
     if not user:
@@ -49,7 +50,8 @@ async def get_recipe(recipe_id: str):
 
 # Lấy công thức của người dùng hiện tại
 @router.get("/by-user", response_model=List[RecipeOut])
-async def get_recipes_by_user(user_email: str = Depends(get_current_user)):
+async def get_recipes_by_user(decoded=Depends(get_current_user)):
+    user_email = extract_user_email(decoded)
     user = await users_collection.find_one({"email": user_email})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -75,7 +77,8 @@ async def get_recipes_by_user(user_email: str = Depends(get_current_user)):
 
 # Đánh giá công thức (thêm sao)
 @router.post("/{recipe_id}/rate")
-async def rate_recipe(recipe_id: str, rating: int, user_email: str = Depends(get_current_user)):
+async def rate_recipe(recipe_id: str, rating: int, decoded=Depends(get_current_user)):
+    user_email = extract_user_email(decoded)
     if rating < 1 or rating > 5:
         raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
     if not ObjectId.is_valid(recipe_id):
