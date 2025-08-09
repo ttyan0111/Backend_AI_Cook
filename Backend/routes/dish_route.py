@@ -120,14 +120,15 @@ async def rate_dish(dish_id: str, rating: int, decoded=Depends(get_current_user)
 ##người dùng thả tim vào 1 món ăn -> favorite
 @router.post("/{dish_id}/favorite")
 async def favorite_dish(dish_id: str, decoded=Depends(get_current_user)):
+    from core.user_management.service import UserDataService
+    
     user_email = extract_user_email(decoded)
     user = await users_collection.find_one({"email": user_email})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    await users_collection.update_one(
-        {"_id": user["_id"]},
-        {"$addToSet": {"favorite_dishes": dish_id}}
-    )
-    return {"msg": "Dish favorited"}
+    
+    # ✅ FIXED: Use UserDataService for normalized structure
+    result = await UserDataService.add_to_favorites(str(user["_id"]), dish_id)
+    return result
 
 

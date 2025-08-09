@@ -10,32 +10,14 @@ from bson import ObjectId
 from typing import Dict, Any, List
 from datetime import datetime, timezone
 
-# FIXED: Use async MongoDB client (Motor) to match async functions
-import os
-import motor.motor_asyncio
-from dotenv import load_dotenv
-
-load_dotenv()
-
-# Use same database config as main.py but with async client
-MONGODB_URI = os.getenv("MONGODB_URI")
-DB_NAME = os.getenv("DATABASE_NAME", "cook_app")
-
-# Async MongoDB client (Motor)
-client = motor.motor_asyncio.AsyncIOMotorClient(
-    MONGODB_URI,
-    tls=True,
-    serverSelectionTimeoutMS=30000,
+from database.mongo import (
+    users_collection,
+    user_social_collection, 
+    user_activity_collection,
+    user_notifications_collection,
+    user_preferences_collection,
+    dishes_collection
 )
-db = client[DB_NAME]
-
-# Async collections
-users_collection = db["users"]
-user_social_collection = db["user_social"] 
-user_activity_collection = db["user_activity"]
-user_notifications_collection = db["user_notifications"]
-user_preferences_collection = db["user_preferences"]
-dishes_collection = db["dishes"]
 
 
 # ==================== PROFILE HANDLERS ====================
@@ -107,24 +89,19 @@ async def get_me_handler(decoded):
     """
     Lấy thông tin người dùng hiện tại (tự động tạo nếu chưa có)
     """
-    print(f"🔍 get_me_handler called with decoded: {decoded}")
     email = extract_user_email(decoded)
-    print(f"📧 Extracted email: {email}")
     
     # Thử tìm user trước - async call
     user = await users_collection.find_one({"email": email})
-    print(f"👤 Found existing user: {user is not None}")
 
     if not user:
         # Tự động tạo user mới nếu chưa tồn tại (first-time login)
-        print("🔥 Creating new user...")
         uid = decoded.get("uid")
         name = decoded.get("name", "")
         avatar = decoded.get("picture", "")
         
         # Tạo display_id từ email
         display_id = email.split('@')[0] if email else f"user_{uid[:8]}"
-        print(f"🆔 Generated display_id: {display_id}")
         
         # Kiểm tra display_id trùng - async call
         counter = 1
@@ -134,7 +111,6 @@ async def get_me_handler(decoded):
             counter += 1
 
         # Tạo user mới
-        from datetime import datetime, timezone
         user_data = {
             "email": email,
             "display_id": display_id,
@@ -145,26 +121,20 @@ async def get_me_handler(decoded):
             "createdAt": datetime.now(timezone.utc),
             "lastLoginAt": datetime.now(timezone.utc),
         }
-        print(f"💾 Inserting user data: {user_data}")
 
         # async call
         result = await users_collection.insert_one(user_data)
         user = await users_collection.find_one({"_id": result.inserted_id})
-        print(f"✅ User created successfully: {user['email']}")
         
         # Khởi tạo các collections phụ cho user mới - async call
         await UserDataService.init_user_data(str(user["_id"]))
-        print("📋 User data collections initialized")
     else:
         # Cập nhật lastLoginAt cho user đã tồn tại - async call
-        print("♻️ User exists, updating lastLoginAt...")
-        from datetime import datetime, timezone
         await users_collection.update_one(
             {"email": email}, 
             {"$set": {"lastLoginAt": datetime.now(timezone.utc)}}
         )
     
-    print(f"🎯 Returning user_helper result for: {user['email']}")
     return user_helper(user)
 async def update_me_handler(user_update: dict, decoded):
     """
@@ -320,14 +290,13 @@ async def notify_favorite_handler(dish_id: str):
     if not creator_id:
         return {"msg": "No creator for this dish"}
     
-    # Đếm số lượt favorite
-    favorite_count = 0
-    async for activity in user_activity_collection.find({}):
-        if dish_id in activity.get("favorite_dishes", []):
-            favorite_count += 1
+    # ✅ OPTIMIZED: Count favorites efficiently using aggregation
+    favorite_count = await user_activity_collection.count_documents({
+        "favorite_dishes": dish_id
+    })
     
     # Gửi thông báo milestone
-    if favorite_count % 5 == 0:
+    if favorite_count > 0 and favorite_count % 5 == 0:
         await user_notifications_collection.update_one(
             {"user_id": creator_id},
             {
