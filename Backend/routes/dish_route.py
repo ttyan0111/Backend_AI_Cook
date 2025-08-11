@@ -1,13 +1,29 @@
 from fastapi import APIRouter, HTTPException, Depends
 from models.dish_model import Dish, DishOut, DishIn
+from models.user_model import UserPreferences
 from models.dish_with_recipe_model import DishWithRecipeIn, DishWithRecipeOut
-from database.mongo import dishes_collection, users_collection, recipe_collection
+from database.mongo import dishes_collection, users_collection, recipe_collection,user_preferences_collection
 from bson import ObjectId
 from datetime import datetime
 from core.auth.dependencies import get_current_user, get_user_by_email, extract_user_email
-
+from app.recommender import score_dish
+from typing import Optional, Any
+from types import SimpleNamespace
 router = APIRouter()
+from typing import List, Optional
+from pydantic import BaseModel
 
+class DishDetailOut(BaseModel):
+    id: str
+    name: str
+    image_url: str
+    cooking_time: int
+    average_rating: float
+    ingredients: List[str] = []
+    liked_by: List[str] = []
+    creator_id: Optional[str] = None
+    recipe_id: Optional[str] = None
+    created_at: Optional[datetime] = None
 # Tạo món ăn và recipe cùng lúc
 @router.post("/with-recipe", response_model=DishWithRecipeOut)
 async def create_dish_with_recipe(data: DishWithRecipeIn, decoded=Depends(get_current_user)):
@@ -81,22 +97,35 @@ async def create_dish(dish: DishIn, decoded=Depends(get_current_user)):
         cooking_time=new_dish["cooking_time"],
         average_rating=new_dish.get("average_rating", 0.0),
     )
+def _to_detail_out(d) -> DishDetailOut:
+    return DishDetailOut(
+        id=str(d["_id"]),
+        name=d.get("name",""),
+        image_url=d.get("image_url",""),
+        cooking_time=int(d.get("cooking_time") or 0),
+        average_rating=float(d.get("average_rating") or 0.0),
+        ingredients=d.get("ingredients") or [],
+        liked_by=d.get("liked_by") or [],
+        creator_id=d.get("creator_id"),
+        recipe_id=d.get("recipe_id"),
+        created_at=d.get("created_at"),
+    )
 
 # Lấy danh sách món ăn
 @router.get("/", response_model=list[DishOut])
 async def get_dishes():
     cursor = dishes_collection.find().sort("created_at", -1).limit(20)
     dishes = await cursor.to_list(length=20)
-    return [
-        DishOut(
-            id=str(d.get("_id", "")),
-            name=d.get("name", ""),
-            image_url=d.get("image_url", ""),
-            cooking_time=d.get("cooking_time", 0),
-            average_rating=d.get("average_rating", 0.0),
-        )
-        for d in dishes
-    ]
+    # ✅ trả list trực tiếp
+    return [_to_detail_out(d) for d in dishes]
+
+
+# gợi ý hôm nay trả full detail
+@router.get("/suggest/today", response_model=list[DishDetailOut])
+async def suggest_today():
+    cursor = dishes_collection.find().sort("created_at", -1).limit(12)
+    docs = await cursor.to_list(length=12)
+    return [_to_detail_out(d) for d in docs]
 
 # ================== RATING & FAV ==================
 ##cho ng dùng đánh giá món ăn
