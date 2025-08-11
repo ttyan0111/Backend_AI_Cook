@@ -50,10 +50,15 @@ async def search_users(q: str = Query(..., min_length=1)):
 @router.get("/dishes", response_model=list[DishOut])
 async def search_dishes(q: str = Query(..., min_length=1)):
     """
-    Tìm kiếm món ăn theo tên
+    Tìm kiếm món ăn theo tên hoặc nguyên liệu
     """
     regex = {"$regex": q, "$options": "i"}
-    cursor = dishes_collection.find({"name": regex}).limit(10)
+    cursor = dishes_collection.find({
+        "$or": [
+            {"name": regex},
+            {"ingredients": {"$elemMatch": {"$regex": q, "$options": "i"}}}
+        ]
+    }).limit(10)
     dishes = await cursor.to_list(length=10)
     return [
         {
@@ -170,6 +175,7 @@ async def filter_dishes_by_difficulty(
 
 # ================== COMBINED SEARCH ==================
 
+# ✅ Cập nhật search_all function
 @router.get("/all")
 async def search_all(q: str = Query(..., min_length=2)):
     """
@@ -177,15 +183,19 @@ async def search_all(q: str = Query(..., min_length=2)):
     """
     regex = {"$regex": q, "$options": "i"}
     
-    # Search dishes
-    dishes_cursor = dishes_collection.find({"name": regex}).limit(5)
+    dishes_cursor = dishes_collection.find({
+        "$or": [
+            {"name": regex},
+            {"ingredients": {"$elemMatch": {"$regex": q, "$options": "i"}}}
+        ]
+    }).limit(5)
     dishes = await dishes_cursor.to_list(length=5)
     
-    # Search users
+  
     users_cursor = users_collection.find({"display_id": regex}).limit(5)
     users = await users_cursor.to_list(length=5)
     
-    # Search ingredients
+
     ingredients_cursor = ingredients_collection.find({"name": regex}).limit(5)
     ingredients = await ingredients_cursor.to_list(length=5)
     
@@ -196,7 +206,8 @@ async def search_all(q: str = Query(..., min_length=2)):
                 "name": d["name"],
                 "type": "dish",
                 "image_url": d.get("image_url", ""),
-                "cooking_time": d.get("cooking_time", 0)
+                "cooking_time": d.get("cooking_time", 0),
+                "ingredients": d.get("ingredients", [])  
             } for d in dishes
         ],
         "users": [
@@ -217,4 +228,57 @@ async def search_all(q: str = Query(..., min_length=2)):
             } for i in ingredients
         ],
         "total_results": len(dishes) + len(users) + len(ingredients)
+    }
+
+# Cập nhật endpoint dishes-by-ingredients
+@router.get("/dishes-by-ingredients")
+async def search_dishes_by_ingredients(
+    ingredients: str = Query("", description="Comma-separated ingredients")
+):
+    """
+    Tìm món ăn theo nhiều nguyên liệu (GET với query params)
+    """
+    # Parse ingredients từ string
+    ingredient_list = [ing.strip() for ing in ingredients.split(',') if ing.strip()]
+    
+    if not ingredient_list:
+        return {"dishes": [], "total_results": 0}
+    
+    # ✅ Sửa query syntax
+    or_conditions = []
+    for ing in ingredient_list:
+        or_conditions.append({"ingredients": {"$regex": ing, "$options": "i"}})
+    
+    # Tìm dishes có chứa ít nhất 1 ingredient
+    cursor = dishes_collection.find({
+        "$or": or_conditions
+    })
+    
+    dishes = await cursor.to_list(length=50)
+    
+    # Sắp xếp theo số lượng ingredients khớp
+    scored_dishes = []
+    for dish in dishes:
+        dish_ingredients = dish.get("ingredients", [])
+        match_count = sum(1 for ing in ingredient_list 
+                         if any(ing.lower() in d_ing.lower() for d_ing in dish_ingredients))
+        
+        scored_dishes.append({
+            "id": str(dish["_id"]),
+            "name": dish["name"],
+            "image_url": dish.get("image_url", ""),
+            "cooking_time": dish.get("cooking_time", 0),
+            "average_rating": dish.get("average_rating", 0.0),
+            "ingredients": dish_ingredients,
+            "match_count": match_count,
+            "match_percentage": (match_count / len(ingredient_list)) * 100
+        })
+    
+    # Sắp xếp theo độ khớp giảm dần
+    scored_dishes.sort(key=lambda x: x["match_count"], reverse=True)
+    
+    return {
+        "dishes": scored_dishes[:20],
+        "total_results": len(scored_dishes),
+        "search_ingredients": ingredient_list
     }
