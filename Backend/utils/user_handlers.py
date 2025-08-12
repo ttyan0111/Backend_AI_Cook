@@ -269,13 +269,83 @@ async def add_viewed_dish_handler(dish_id: str, decoded):
     """
     Thêm món vào lịch sử đã xem
     """
+
+    if not ObjectId.is_valid(dish_id):
+        raise HTTPException(status_code=400, detail="Invalid dish ID")
+    
+
+    dish = await dishes_collection.find_one({"_id": ObjectId(dish_id)})
+    if not dish:
+        raise HTTPException(status_code=404, detail="Dish not found")
+    
     email = extract_user_email(decoded)
     user = await users_collection.find_one({"email": email})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    result = await UserDataService.add_to_viewed(str(user["_id"]), dish_id, MAX_HISTORY)
-    return result
+
+    viewed_dish = {
+        "dish_id": dish_id,
+        "viewed_at": datetime.utcnow()
+    }
+    
+    await users_collection.update_one(
+        {"_id": user["_id"]},
+        {
+            "$pull": {"viewed_dishes": {"dish_id": dish_id}},  # Xóa cũ nếu có
+        }
+    )
+    
+    await users_collection.update_one(
+        {"_id": user["_id"]},
+        {
+            "$push": {
+                "viewed_dishes": {
+                    "$each": [viewed_dish],
+                    "$position": 0,  # Thêm vào đầu list
+                    "$slice": 50     # Giữ tối đa 50 items
+                }
+            }
+        },
+        upsert=True
+    )
+    
+    return {"message": "Dish added to view history", "dish_id": dish_id}
+
+# Trong user_handlers.py (handler function)
+async def get_viewed_dishes_handler(limit: int, decoded):
+    """
+    Lấy lịch sử món đã xem
+    """
+    try:
+        email = extract_user_email(decoded)
+        user = await users_collection.find_one({"email": email})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        viewed_dishes = user.get("viewed_dishes", [])[:limit]
+        
+        # Lấy thông tin chi tiết của các món đã xem
+        dish_details = []
+        for item in viewed_dishes:
+            dish = await dishes_collection.find_one({"_id": ObjectId(item["dish_id"])})
+            if dish:
+                dish_details.append({
+                    "id": str(dish["_id"]),
+                    "name": dish.get("name", ""),
+                    "image_b64": dish.get("image_b64"),
+                    "image_mime": dish.get("image_mime"),
+                    "cooking_time": dish.get("cooking_time", 0),
+                    "average_rating": dish.get("average_rating", 0.0),
+                    "viewed_at": item["viewed_at"]
+                })
+        
+        return {
+            "viewed_dishes": dish_details,
+            "total": len(dish_details)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 async def notify_favorite_handler(dish_id: str):

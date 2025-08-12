@@ -23,7 +23,8 @@ from utils.user_handlers import (
     add_cooked_dish_handler,
     add_viewed_dish_handler,
     notify_favorite_handler,
-    
+    get_viewed_dishes_handler,
+
     # Preferences handlers
     get_my_notifications_handler,
     set_reminders_handler,
@@ -80,6 +81,10 @@ async def add_cooked_dish(dish_id: str, decoded=Depends(get_current_user)):
 @router.post("/me/viewed/{dish_id}")
 async def add_viewed_dish(dish_id: str, decoded=Depends(get_current_user)):
     return await add_viewed_dish_handler(dish_id, decoded)
+
+@router.get("/me/viewed-dishes")
+async def get_viewed_dishes(limit: int = 20, decoded=Depends(get_current_user)):
+    return await get_viewed_dishes_handler(limit, decoded)
 
 @router.post("/notify-favorite/{dish_id}")
 async def notify_favorite(dish_id: str):

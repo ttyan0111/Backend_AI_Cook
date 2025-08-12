@@ -11,6 +11,25 @@ from pydantic import BaseModel
 
 router = APIRouter()
 
+class RecipeDetailOut(BaseModel):
+    id: str
+    name: str
+    description: str = ""
+    ingredients: list = []
+    difficulty: str = ""
+    instructions: list = []
+    average_rating: float = 0.0
+    image_b64: str = None
+    image_mime: str = None
+    created_by: str = None
+    dish_id: str = None
+    ratings: list = []
+    created_at: datetime = None
+
+class DishWithRecipeDetailOut(BaseModel):
+    dish: 'DishDetailOut'
+    recipe: Optional[RecipeDetailOut] = None
+
 class DishDetailOut(BaseModel):
     id: str
     name: str
@@ -154,12 +173,46 @@ async def suggest_today():
     return [_to_detail_out(d) for d in docs]
 
 # Chi tiết
+# Chi tiết
+
+# Chi tiết dish
 @router.get("/{dish_id}", response_model=DishDetailOut)
 async def get_dish_detail(dish_id: str):
     d = await dishes_collection.find_one({"_id": ObjectId(dish_id)})
     if not d:
         raise HTTPException(status_code=404, detail="Dish not found")
     return _to_detail_out(d)
+
+# Chi tiết dish + recipe
+@router.get("/{dish_id}/with-recipe", response_model=DishWithRecipeDetailOut)
+async def get_dish_with_recipe(dish_id: str):
+    dish = await dishes_collection.find_one({"_id": ObjectId(dish_id)})
+    if not dish:
+        raise HTTPException(status_code=404, detail="Dish not found")
+    recipe = None
+    recipe_id = dish.get("recipe_id")
+    if recipe_id:
+        r = await recipe_collection.find_one({"_id": ObjectId(recipe_id)})
+        if r:
+            recipe = RecipeDetailOut(
+                id=str(r["_id"]),
+                name=r.get("name", ""),
+                description=r.get("description", ""),
+                ingredients=r.get("ingredients", []),
+                difficulty=r.get("difficulty", ""),
+                instructions=r.get("instructions", []),
+                average_rating=float(r.get("average_rating", 0.0)),
+                image_b64=r.get("image_b64"),
+                image_mime=r.get("image_mime"),
+                created_by=r.get("created_by"),
+                dish_id=r.get("dish_id"),
+                ratings=r.get("ratings", []),
+                created_at=r.get("created_at"),
+            )
+    return DishWithRecipeDetailOut(
+        dish=_to_detail_out(dish),
+        recipe=recipe
+    )
 
 # Đánh giá
 @router.post("/{dish_id}/rate")
