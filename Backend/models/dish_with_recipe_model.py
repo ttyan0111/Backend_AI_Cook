@@ -1,20 +1,20 @@
 from pydantic import BaseModel
 from typing import List, Optional
-from models.dish_model import DishIn
-from models.recipe_model import RecipeIn
 
 class DishWithRecipeIn(BaseModel):
-    # Thông tin dish
+ 
     name: str
-    image_url: str
+    image_url: Optional[str] = None          # Make optional
+    image_b64: Optional[str] = None          # Add this
+    image_mime: Optional[str] = None         # Add this
     ingredients: List[str]
     cooking_time: int
     
     # Thông tin recipe
-    recipe_name: Optional[str] = None  # Nếu không nhập sẽ dùng name của dish
+    recipe_name: Optional[str] = None
     recipe_description: Optional[str] = ""
-    recipe_ingredients: Optional[List[str]] = None  # Nếu không nhập sẽ dùng ingredients của dish
-    difficulty: str = "medium"
+    recipe_ingredients: Optional[List[str]] = None
+    difficulty: str = "medium"  
     instructions: List[str]
     
     class Config:

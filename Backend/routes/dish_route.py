@@ -103,10 +103,18 @@ async def create_dish(dish: DishIn, decoded=Depends(get_current_user)):
     )
 
 # Tạo dish + recipe (giữ ảnh ở cả 2 nếu cần)
+# Tạo dish + recipe (giữ ảnh ở cả 2 nếu cần)
 @router.post("/with-recipe", response_model=DishWithRecipeOut)
 async def create_dish_with_recipe(data: DishWithRecipeIn, decoded=Depends(get_current_user)):
     user_email = extract_user_email(decoded)
     user = await get_user_by_email(user_email)
+
+    # Difficulty mapping từ tiếng Việt sang tiếng Anh
+    difficulty_map = {
+        "Dễ": "easy",
+        "Trung bình": "medium", 
+        "Khó": "hard"
+    }
 
     image_b64 = getattr(data, "image_b64", None)
     image_mime = getattr(data, "image_mime", None)
@@ -119,6 +127,7 @@ async def create_dish_with_recipe(data: DishWithRecipeIn, decoded=Depends(get_cu
         "image_mime": image_mime,
         "creator_id": str(user["_id"]),
     })
+    
     dish_result = await dishes_collection.insert_one(dish_doc)
     if not dish_result.inserted_id:
         raise HTTPException(status_code=500, detail="Failed to create dish")
@@ -127,9 +136,9 @@ async def create_dish_with_recipe(data: DishWithRecipeIn, decoded=Depends(get_cu
 
     recipe_doc = {
         "name": data.recipe_name or f"Cách làm {data.name}",
-        "description": data.recipe_description,
+        "description": data.recipe_description or f"Hướng dẫn làm {data.name}",
         "ingredients": data.recipe_ingredients or data.ingredients,
-        "difficulty": data.difficulty,
+        "difficulty": difficulty_map.get(data.difficulty, data.difficulty.lower()),
         "instructions": data.instructions,
         "dish_id": dish_id,
         "created_by": user_email,
@@ -137,12 +146,15 @@ async def create_dish_with_recipe(data: DishWithRecipeIn, decoded=Depends(get_cu
         "average_rating": 0.0,
         "image_b64": image_b64,
         "image_mime": image_mime,
+        "created_at": datetime.utcnow(),
     }
+    
     recipe_result = await recipe_collection.insert_one(recipe_doc)
     if not recipe_result.inserted_id:
         await dishes_collection.delete_one({"_id": dish_result.inserted_id})
         raise HTTPException(status_code=500, detail="Failed to create recipe")
 
+    # Cập nhật dish với recipe_id
     await dishes_collection.update_one(
         {"_id": dish_result.inserted_id},
         {"$set": {"recipe_id": str(recipe_result.inserted_id)}}
@@ -153,6 +165,7 @@ async def create_dish_with_recipe(data: DishWithRecipeIn, decoded=Depends(get_cu
         recipe_id=str(recipe_result.inserted_id),
         dish_name=data.name,
         recipe_name=recipe_doc["name"],
+        message=f"Món '{data.name}' và công thức nấu ăn đã được tạo thành công!"
     )
 
 # List
