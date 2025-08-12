@@ -29,9 +29,9 @@ class UserSocial(BaseModel):
 # Model cho user activity history  
 class UserActivity(BaseModel):
     user_id: str
-    favorite_dishes: List[str] = []
+    favorite_dishes: List[str] = [] 
     cooked_dishes: List[str] = []
-    viewed_dishes: List[str] = []
+    viewed_dishes_and_users: List[str] = []
     created_recipes: List[str] = []
     created_dishes: List[str] = []
 
