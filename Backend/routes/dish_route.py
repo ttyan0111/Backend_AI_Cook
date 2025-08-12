@@ -8,6 +8,35 @@ from datetime import datetime
 from core.auth.dependencies import get_current_user, get_user_by_email, extract_user_email
 from typing import List, Optional
 from pydantic import BaseModel
+import cloudinary
+import cloudinary.uploader
+from cloudinary.utils import cloudinary_url
+import os
+from dotenv import load_dotenv
+import base64
+import io
+import logging
+
+load_dotenv() 
+
+# Load Cloudinary credentials từ environment variables
+CLOUDINARY_CLOUD_NAME = os.getenv("CLOUDINARY_CLOUD_NAME")
+CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY")
+CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET")
+
+# Kiểm tra xem các credentials có đầy đủ không
+if not all([CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET]):
+    raise ValueError("Missing Cloudinary credentials. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in your environment variables.")
+
+# Configure Cloudinary với credentials từ environment
+cloudinary.config(
+    cloud_name=CLOUDINARY_CLOUD_NAME,
+    api_key=CLOUDINARY_API_KEY,
+    api_secret=CLOUDINARY_API_SECRET,
+    secure=True
+)
+
+print(f"Cloudinary configured with cloud_name: {CLOUDINARY_CLOUD_NAME}")
 
 router = APIRouter()
 
@@ -19,8 +48,7 @@ class RecipeDetailOut(BaseModel):
     difficulty: str = ""
     instructions: list = []
     average_rating: float = 0.0
-    image_b64: str = None
-    image_mime: str = None
+    image_url: str = None  # Thay đổi từ image_b64 sang image_url
     created_by: str = None
     dish_id: str = None
     ratings: list = []
@@ -33,8 +61,7 @@ class DishWithRecipeDetailOut(BaseModel):
 class DishDetailOut(BaseModel):
     id: str
     name: str
-    image_b64: Optional[str] = None
-    image_mime: Optional[str] = None
+    image_url: Optional[str] = None  # Thay đổi từ image_b64 sang image_url
     cooking_time: int
     average_rating: float
     ingredients: List[str] = []
@@ -47,8 +74,7 @@ def _to_detail_out(d) -> DishDetailOut:
     return DishDetailOut(
         id=str(d["_id"]),
         name=d.get("name", ""),
-        image_b64=d.get("image_b64"),
-        image_mime=d.get("image_mime"),
+        image_url=d.get("image_url"),  # Thay đổi từ image_b64 sang image_url
         cooking_time=int(d.get("cooking_time") or 0),
         average_rating=float(d.get("average_rating") or 0.0),
         ingredients=d.get("ingredients") or [],
@@ -64,8 +90,8 @@ def _clean_dish_data(dish_dict: dict) -> dict:
     for k in ["name", "cooking_time", "ingredients"]:
         if k in dish_dict and dish_dict[k] not in (None, "", [], {}):
             cleaned[k] = dish_dict[k]
-    # tùy chọn (không có image_url)
-    for k in ["image_b64", "image_mime", "creator_id", "recipe_id"]:
+    # tùy chọn (thay image_b64/image_mime bằng image_url)
+    for k in ["image_url", "creator_id", "recipe_id"]:
         if k in dish_dict and dish_dict[k] not in (None, "", [], {}):
             cleaned[k] = dish_dict[k]
     # mặc định
@@ -75,6 +101,66 @@ def _clean_dish_data(dish_dict: dict) -> dict:
     cleaned.setdefault("created_at", datetime.utcnow())
     return cleaned
 
+async def upload_image_to_cloudinary(image_b64: str, image_mime: str, folder: str = "dishes") -> str:
+    """
+    Upload base64 image to Cloudinary và trả về secure_url
+    Sử dụng credentials đã được config ở trên
+    """
+    try:
+        # Debug: Log để kiểm tra credentials
+        logging.info(f"Uploading to Cloudinary - Cloud: {CLOUDINARY_CLOUD_NAME}, Folder: {folder}")
+        
+        # Decode base64 image
+        image_data = base64.b64decode(image_b64)
+        
+        # Upload to Cloudinary sử dụng config đã set
+        upload_result = cloudinary.uploader.upload(
+    image_data,
+    folder=folder,
+    resource_type="image",
+    transformation=[
+        {"quality": "auto:good"},
+        {"fetch_format": "auto"}
+    ]
+)
+        
+        logging.info(f"Successfully uploaded image: {upload_result['secure_url']}")
+        return upload_result["secure_url"]
+        
+    except Exception as e:
+        logging.error(f"Failed to upload image to Cloudinary (Cloud: {CLOUDINARY_CLOUD_NAME}): {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload image: {str(e)}")
+
+def get_optimized_image_url(public_id: str, width: int = None, height: int = None, crop: str = "auto") -> str:
+    """
+    Tạo optimized image URL từ Cloudinary với các transformation
+    """
+    try:
+        transformations = []
+        
+        if width and height:
+            transformations.append({
+                "width": width,
+                "height": height,
+                "crop": crop,
+                "gravity": "auto"
+            })
+        
+        transformations.extend([
+            {"quality": "auto:good"},
+            {"fetch_format": "auto"}
+        ])
+        
+        optimized_url, _ = cloudinary_url(
+            public_id,
+            transformation=transformations
+        )
+        
+        return optimized_url
+    except Exception as e:
+        logging.error(f"Failed to generate optimized URL: {str(e)}")
+        return public_id  # Fallback to original URL
+
 # Tạo món (FE gửi JSON có image_b64/image_mime)
 @router.post("/", response_model=DishOut)
 async def create_dish(dish: DishIn, decoded=Depends(get_current_user)):
@@ -82,12 +168,21 @@ async def create_dish(dish: DishIn, decoded=Depends(get_current_user)):
     user = await get_user_by_email(user_email)
 
     payload = dish.dict()
+    
+    # Upload image to Cloudinary if provided
+    image_url = None
+    if payload.get("image_b64") and payload.get("image_mime"):
+        image_url = await upload_image_to_cloudinary(
+            payload["image_b64"], 
+            payload["image_mime"], 
+            folder="dishes"
+        )
+
     new_doc = _clean_dish_data({
         "name": payload["name"],
         "cooking_time": payload["cooking_time"],
         "ingredients": payload.get("ingredients", []),
-        "image_b64": payload.get("image_b64"),
-        "image_mime": payload.get("image_mime"),
+        "image_url": image_url,  # Lưu URL thay vì base64
         "creator_id": str(user["_id"]),
     })
 
@@ -102,8 +197,7 @@ async def create_dish(dish: DishIn, decoded=Depends(get_current_user)):
         average_rating=new_doc.get("average_rating", 0.0),
     )
 
-# Tạo dish + recipe (giữ ảnh ở cả 2 nếu cần)
-# Tạo dish + recipe (giữ ảnh ở cả 2 nếu cần)
+# Tạo dish + recipe (upload ảnh lên Cloudinary)
 @router.post("/with-recipe", response_model=DishWithRecipeOut)
 async def create_dish_with_recipe(data: DishWithRecipeIn, decoded=Depends(get_current_user)):
     user_email = extract_user_email(decoded)
@@ -118,13 +212,21 @@ async def create_dish_with_recipe(data: DishWithRecipeIn, decoded=Depends(get_cu
 
     image_b64 = getattr(data, "image_b64", None)
     image_mime = getattr(data, "image_mime", None)
+    
+    # Upload image to Cloudinary if provided
+    image_url = None
+    if image_b64 and image_mime:
+        image_url = await upload_image_to_cloudinary(
+            image_b64, 
+            image_mime, 
+            folder="dishes"
+        )
 
     dish_doc = _clean_dish_data({
         "name": data.name,
         "ingredients": data.ingredients,
         "cooking_time": data.cooking_time,
-        "image_b64": image_b64,
-        "image_mime": image_mime,
+        "image_url": image_url,  # Lưu URL thay vì base64
         "creator_id": str(user["_id"]),
     })
     
@@ -144,8 +246,7 @@ async def create_dish_with_recipe(data: DishWithRecipeIn, decoded=Depends(get_cu
         "created_by": user_email,
         "ratings": [],
         "average_rating": 0.0,
-        "image_b64": image_b64,
-        "image_mime": image_mime,
+        "image_url": image_url,  # Lưu URL thay vì base64
         "created_at": datetime.utcnow(),
     }
     
@@ -185,9 +286,6 @@ async def suggest_today():
     ).sort("created_at", -1).limit(12).to_list(length=12)
     return [_to_detail_out(d) for d in docs]
 
-# Chi tiết
-# Chi tiết
-
 # Chi tiết dish
 @router.get("/{dish_id}", response_model=DishDetailOut)
 async def get_dish_detail(dish_id: str):
@@ -202,6 +300,7 @@ async def get_dish_with_recipe(dish_id: str):
     dish = await dishes_collection.find_one({"_id": ObjectId(dish_id)})
     if not dish:
         raise HTTPException(status_code=404, detail="Dish not found")
+    
     recipe = None
     recipe_id = dish.get("recipe_id")
     if recipe_id:
@@ -215,13 +314,13 @@ async def get_dish_with_recipe(dish_id: str):
                 difficulty=r.get("difficulty", ""),
                 instructions=r.get("instructions", []),
                 average_rating=float(r.get("average_rating", 0.0)),
-                image_b64=r.get("image_b64"),
-                image_mime=r.get("image_mime"),
+                image_url=r.get("image_url"),  # Thay đổi từ image_b64 sang image_url
                 created_by=r.get("created_by"),
                 dish_id=r.get("dish_id"),
                 ratings=r.get("ratings", []),
                 created_at=r.get("created_at"),
             )
+    
     return DishWithRecipeDetailOut(
         dish=_to_detail_out(dish),
         recipe=recipe
@@ -254,9 +353,10 @@ async def favorite_dish(dish_id: str, decoded=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="User not found")
     return await UserDataService.add_to_favorites(str(user["_id"]), dish_id)
 
-# Cleanup
+# Cleanup - cập nhật để xóa cả image_b64 fields cũ
 @router.post("/admin/cleanup")
 async def cleanup_dishes(decoded=Depends(get_current_user)):
+    # Xóa dishes không hợp lệ
     res = await dishes_collection.delete_many({
         "$or": [
             {"name": {"$exists": False}},
@@ -264,4 +364,80 @@ async def cleanup_dishes(decoded=Depends(get_current_user)):
             {"name": None}
         ]
     })
-    return {"deleted_count": res.deleted_count, "message": "Cleanup completed"}
+    
+    # Migration: Xóa các fields image_b64, image_mime cũ (tùy chọn)
+    migration_res = await dishes_collection.update_many(
+        {},
+        {"$unset": {"image_b64": "", "image_mime": ""}}
+    )
+    
+    recipe_migration_res = await recipe_collection.update_many(
+        {},
+        {"$unset": {"image_b64": "", "image_mime": ""}}
+    )
+    
+    return {
+        "deleted_count": res.deleted_count, 
+        "dishes_migrated": migration_res.modified_count,
+        "recipes_migrated": recipe_migration_res.modified_count,
+        "message": "Cleanup and migration completed"
+    }
+
+# Utility endpoint để migrate existing data
+@router.post("/admin/migrate-images")
+async def migrate_existing_images(decoded=Depends(get_current_user)):
+    """
+    Migrate existing dishes và recipes từ image_b64 sang Cloudinary URLs
+    """
+    migrated_dishes = 0
+    migrated_recipes = 0
+    
+    # Migrate dishes
+    dishes_cursor = dishes_collection.find({"image_b64": {"$exists": True, "$ne": None}})
+    async for dish in dishes_cursor:
+        try:
+            if dish.get("image_b64") and dish.get("image_mime"):
+                image_url = await upload_image_to_cloudinary(
+                    dish["image_b64"], 
+                    dish["image_mime"], 
+                    folder="dishes_migration"
+                )
+                
+                await dishes_collection.update_one(
+                    {"_id": dish["_id"]},
+                    {
+                        "$set": {"image_url": image_url},
+                        "$unset": {"image_b64": "", "image_mime": ""}
+                    }
+                )
+                migrated_dishes += 1
+        except Exception as e:
+            logging.error(f"Failed to migrate dish {dish['_id']}: {str(e)}")
+    
+    # Migrate recipes
+    recipes_cursor = recipe_collection.find({"image_b64": {"$exists": True, "$ne": None}})
+    async for recipe in recipes_cursor:
+        try:
+            if recipe.get("image_b64") and recipe.get("image_mime"):
+                image_url = await upload_image_to_cloudinary(
+                    recipe["image_b64"], 
+                    recipe["image_mime"], 
+                    folder="recipes_migration"
+                )
+                
+                await recipe_collection.update_one(
+                    {"_id": recipe["_id"]},
+                    {
+                        "$set": {"image_url": image_url},
+                        "$unset": {"image_b64": "", "image_mime": ""}
+                    }
+                )
+                migrated_recipes += 1
+        except Exception as e:
+            logging.error(f"Failed to migrate recipe {recipe['_id']}: {str(e)}")
+    
+    return {
+        "migrated_dishes": migrated_dishes,
+        "migrated_recipes": migrated_recipes,
+        "message": "Image migration completed"
+    }
