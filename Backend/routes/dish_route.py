@@ -289,13 +289,111 @@ async def suggest_today():
     ).sort("created_at", -1).limit(12).to_list(length=12)
     return [_to_detail_out(d) for d in docs]
 
-# Chi tiết dish
+@router.get("/random", response_model=List[DishDetailOut])
+async def get_random_dishes(limit: int = 3):
+    """
+    Lấy ngẫu nhiên các món ăn để làm placeholder cho "Gợi ý món hôm nay"
+    """
+    try:
+        # Sử dụng MongoDB aggregation pipeline để lấy random documents
+        pipeline = [
+            {"$match": {"name": {"$exists": True, "$ne": ""}}},  # Filter valid dishes
+            {"$sample": {"size": limit}},  # Random sampling
+        ]
+        
+        docs = await dishes_collection.aggregate(pipeline).to_list(length=limit)
+        return [_to_detail_out(d) for d in docs]
+        
+    except Exception as e:
+        logging.error(f"Error fetching random dishes: {str(e)}")
+        # Fallback to regular query if aggregation fails
+        cursor = dishes_collection.find(
+            {"name": {"$exists": True, "$ne": ""}}
+        ).sort("created_at", -1).limit(limit)
+        docs = await cursor.to_list(length=limit)
+        return [_to_detail_out(d) for d in docs]
+    
+
+# Chi tiết dish (1 cá nhân)
 @router.get("/{dish_id}", response_model=DishDetailOut)
 async def get_dish_detail(dish_id: str):
     d = await dishes_collection.find_one({"_id": ObjectId(dish_id)})
     if not d:
         raise HTTPException(status_code=404, detail="Dish not found")
     return _to_detail_out(d)
+
+
+#chi tiết dish cho personalscreen
+@router.get("/my-dishes", response_model=List[DishDetailOut])
+async def get_my_dishes(
+    limit: int = 10,
+    skip: int = 0,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get dishes created by the current logged-in user"""
+    
+    user_id = current_user.get("user_id") or current_user.get("id")
+    user_email = current_user.get("email")
+    
+    # Debug log
+    print(f"Fetching dishes for user: {user_id} (email: {user_email})")
+    
+
+    query_filter = {
+        "$or": [
+            {"creator_id": user_id},           
+            {"creator_id": str(user_id)},      
+            {"created_by": user_id},
+            {"created_by": user_email},
+            {"user_id": user_id},
+            {"owner_id": user_id}
+        ]
+    }
+    
+    # Debug: Log the query
+    print(f"MongoDB query filter: {query_filter}")
+    
+    # Query dishes created by this user, sorted by creation date (newest first)
+    user_dishes_cursor = dishes_collection.find(query_filter).sort("created_at", -1).skip(skip).limit(limit)
+    
+    dishes = await user_dishes_cursor.to_list(length=limit)
+    
+    # Debug: Log results
+    print(f"Found {len(dishes)} dishes for user {user_id}")
+    if dishes:
+        print(f"Sample dish: {dishes[0].get('name')} (creator_id: {dishes[0].get('creator_id')})")
+    
+    return [_to_detail_out(dish) for dish in dishes]
+
+# ✅ ALTERNATIVE: Modify existing dishes endpoint
+@router.get("/", response_model=List[DishDetailOut])
+async def get_dishes(
+    limit: int = 20,
+    skip: int = 0,
+    my_dishes: bool = False,  # Add this query parameter
+    current_user: dict = Depends(get_current_user)
+):
+    """Get dishes with optional filtering for user's own dishes"""
+    
+    query = {}
+    
+    # Filter by current user's dishes if requested
+    if my_dishes:
+        user_id = current_user.get("user_id") or current_user.get("id")
+        query = {
+            "$or": [
+                {"created_by": user_id},
+                {"created_by": current_user.get("email")},
+                {"user_id": user_id},
+                {"owner_id": user_id}
+            ]
+        }
+    
+    dishes_cursor = dishes_collection.find(query).sort("created_at", -1).skip(skip).limit(limit)
+    dishes = await dishes_cursor.to_list(length=limit)
+    
+    return [_to_detail_out(dish) for dish in dishes]
+
 
 # Chi tiết dish + recipe
 @router.get("/{dish_id}/with-recipe", response_model=DishWithRecipeDetailOut)
@@ -489,3 +587,41 @@ async def migrate_existing_images(decoded=Depends(get_current_user)):
         "migrated_recipes": migrated_recipes,
         "message": "Image migration completed"
     }
+
+
+@router.post("/dishes/{dish_id}/view")
+async def log_dish_view(dish_id: str, decoded=Depends(get_current_user)):
+    """Log khi user xem chi tiết một món ăn"""
+    uid = decoded["uid"]
+    now = datetime.now(timezone.utc)
+
+    doc = {
+        "type": "dish",
+        "id": dish_id,
+        "name": "",
+        "image": "",
+        "ts": now,
+    }
+
+    await user_activity_col.update_one(
+        {"user_id": uid},
+        {"$pull": {"viewed_dishes_and_users": {"type": "dish", "id": dish_id}}},
+        upsert=True
+    )
+
+    await user_activity_col.update_one(
+        {"user_id": uid},
+        {
+            "$push": {
+                "viewed_dishes_and_users": {
+                    "$each": [doc],
+                    "$position": 0,
+                    "$slice": MAX_HISTORY
+                }
+            },
+            "$set": {"updated_at": now}
+        },
+        upsert=True
+    )
+
+    return {"ok": True, "dish_id": dish_id}
