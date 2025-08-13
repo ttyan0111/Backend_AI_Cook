@@ -6,7 +6,7 @@ from database.mongo import dishes_collection, users_collection, recipe_collectio
 from bson import ObjectId
 from datetime import datetime
 from core.auth.dependencies import get_current_user, get_user_by_email, extract_user_email
-from typing import List, Optional
+from typing import List, Optional, Dict
 from pydantic import BaseModel
 import cloudinary
 import cloudinary.uploader
@@ -16,7 +16,6 @@ from dotenv import load_dotenv
 import base64
 import io
 import logging
-
 load_dotenv() 
 
 # Load Cloudinary credentials từ environment variables
@@ -69,6 +68,10 @@ class DishDetailOut(BaseModel):
     creator_id: Optional[str] = None
     recipe_id: Optional[str] = None
     created_at: Optional[datetime] = None
+
+
+class CheckFavoritesRequest(BaseModel):
+    dish_ids: List[str]
 
 def _to_detail_out(d) -> DishDetailOut:
     return DishDetailOut(
@@ -343,15 +346,60 @@ async def rate_dish(dish_id: str, rating: int, decoded=Depends(get_current_user)
     )
     return {"msg": "Rating added", "average_rating": avg}
 
+
+
 # Yêu thích
-@router.post("/{dish_id}/favorite")
-async def favorite_dish(dish_id: str, decoded=Depends(get_current_user)):
-    from core.user_management.service import UserDataService
-    user_email = extract_user_email(decoded)
+@router.post("/{dish_id}/toggle-favorite")
+async def toggle_favorite_dish(dish_id: str, decoded=Depends(get_current_user)):
+    user_email = decoded.get("email")
     user = await users_collection.find_one({"email": user_email})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return await UserDataService.add_to_favorites(str(user["_id"]), dish_id)
+    favorite_ids = user.get("favorite_dishes") or []
+    dish_id_str = str(dish_id)
+    if dish_id_str in favorite_ids:
+        # Nếu đã yêu thích thì bỏ ra
+        await users_collection.update_one(
+            {"_id": user["_id"]},
+            {"$pull": {"favorite_dishes": dish_id_str}}
+        )
+        return {"isFavorite": False}
+    else:
+        # Nếu chưa yêu thích thì thêm vào
+        await users_collection.update_one(
+            {"_id": user["_id"]},
+            {"$addToSet": {"favorite_dishes": dish_id_str}}
+        )
+        return {"isFavorite": True}
+    
+
+@router.post("/check-favorites", response_model=Dict[str, bool])
+async def check_favorites(request: CheckFavoritesRequest, decoded=Depends(get_current_user)):
+    """
+    Check favorite status for multiple dishes
+    Returns a dictionary mapping dish_id -> is_favorite
+    """
+    try:
+        user_email = extract_user_email(decoded)
+        user = await get_user_by_email(user_email)
+        
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Get user's favorite dishes
+        favorite_dish_ids = user.get("favorite_dishes", [])
+        
+        # Create response dictionary
+        result = {}
+        for dish_id in request.dish_ids:
+            result[dish_id] = dish_id in favorite_dish_ids
+            
+        return result
+        
+    except Exception as e:
+        logging.error(f"Error checking favorites: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to check favorites: {str(e)}")
+
 
 # Cleanup - cập nhật để xóa cả image_b64 fields cũ
 @router.post("/admin/cleanup")
