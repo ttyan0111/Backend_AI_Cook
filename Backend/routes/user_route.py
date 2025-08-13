@@ -16,6 +16,7 @@ from utils.user_handlers import (
     get_me_handler,
     update_me_handler,
     search_users_handler,
+    get_my_favorites_handler,
     
     # Social handlers
     get_my_social_handler,
@@ -59,6 +60,10 @@ async def search_users(q: str, decoded=Depends(get_current_user)):
 @router.get("/{user_id}", response_model=UserOut) 
 async def get_user(user_id: str):
     return await get_user_handler(user_id)
+
+@router.get("/me/favorites")
+async def get_my_favorites(decoded=Depends(get_current_user)):
+    return await get_my_favorites_handler(decoded)
 
 # ==================== SOCIAL ROUTES ====================
 @router.get("/me/social")
@@ -136,7 +141,7 @@ async def add_view_history(payload: ViewEventIn, decoded=Depends(get_current_use
         "ts": payload.timestamp or now,
     }
 
-    # 1) Gỡ item cũ (nếu có) theo cặp (type,id) để tránh duplicate
+
     await user_activity_col.update_one(
         {"user_id": uid},
         {"$pull": {"viewed_dishes_and_users": {"type": doc["type"], "id": doc["id"]}}},
@@ -160,7 +165,7 @@ async def add_view_history(payload: ViewEventIn, decoded=Depends(get_current_use
     )
 
     return {"ok": True, "added": doc}
-# ---- THÊM VÀO CUỐI FILE users router (cùng nơi bạn đã có ViewEventIn/ add_view_history) ----
+
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 
@@ -168,7 +173,7 @@ class ViewEventOut(BaseModel):
     type: Literal["dish", "user"]
     id: str
     name: Optional[str] = ""
-    image: Optional[str] = ""   # URL hoặc data:image/...;base64,...
+    image: Optional[str] = ""  
     ts: Optional[datetime] = None
 
 def _normalize_view_entry(it: Any) -> Optional[Dict[str, Any]]:

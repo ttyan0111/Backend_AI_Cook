@@ -426,3 +426,31 @@ async def get_reminders_handler(decoded):
     
     preferences = await user_preferences_collection.find_one({"user_id": str(user["_id"])})
     return preferences.get("reminders", []) if preferences else []
+
+async def get_my_favorites_handler(decoded):
+    """
+    Trả về danh sách món ăn yêu thích của user hiện tại.
+    """
+    user_email = decoded.get("email")
+    user = await users_collection.find_one({"email": user_email})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    favorite_ids = user.get("favorite_dishes", [])
+    if not isinstance(favorite_ids, list):
+        favorite_ids = []
+
+    dishes = []
+    if favorite_ids:
+        try:
+            object_ids = [ObjectId(did) for did in favorite_ids if ObjectId.is_valid(did)]
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid dish ID format")
+
+        cursor = dishes_collection.find({"_id": {"$in": object_ids}})
+        async for dish in cursor:
+            dish["id"] = str(dish["_id"])
+            dish["_id"] = str(dish["_id"])
+            dishes.append(dish)
+
+    return dishes
