@@ -1,4 +1,4 @@
-# routers/dishes.py
+# routers/dishes.py - FIXED VERSION
 from fastapi import APIRouter, HTTPException, Depends, Query
 from models.dish_model import Dish, DishOut, DishIn
 from models.dish_with_recipe_model import DishWithRecipeIn, DishWithRecipeOut
@@ -47,7 +47,7 @@ class RecipeDetailOut(BaseModel):
     difficulty: str = ""
     instructions: list = []
     average_rating: float = 0.0
-    image_url: str = None  # Thay đổi từ image_b64 sang image_url
+    image_url: str = None
     created_by: str = None
     dish_id: str = None
     ratings: list = []
@@ -57,44 +57,48 @@ class DishWithRecipeDetailOut(BaseModel):
     dish: 'DishDetailOut'
     recipe: Optional[RecipeDetailOut] = None
 
+# ✅ FIXED: Add difficulty field to DishDetailOut
 class DishDetailOut(BaseModel):
     id: str
     name: str
-    image_url: Optional[str] = None  # Thay đổi từ image_b64 sang image_url
+    image_url: Optional[str] = None
     cooking_time: int
     average_rating: float
     ingredients: List[str] = []
     liked_by: List[str] = []
     creator_id: Optional[str] = None
     recipe_id: Optional[str] = None
+    difficulty: Optional[str] = None  # ✅ ADDED: difficulty field
     created_at: Optional[datetime] = None
-
 
 class CheckFavoritesRequest(BaseModel):
     dish_ids: List[str]
 
+# ✅ FIXED: Include difficulty in output
 def _to_detail_out(d) -> DishDetailOut:
     return DishDetailOut(
         id=str(d["_id"]),
         name=d.get("name", ""),
-        image_url=d.get("image_url"),  # Thay đổi từ image_b64 sang image_url
+        image_url=d.get("image_url"),
         cooking_time=int(d.get("cooking_time") or 0),
         average_rating=float(d.get("average_rating") or 0.0),
         ingredients=d.get("ingredients") or [],
         liked_by=d.get("liked_by") or [],
         creator_id=d.get("creator_id"),
         recipe_id=d.get("recipe_id"),
+        difficulty=d.get("difficulty"),  # ✅ ADDED: Include difficulty in output
         created_at=d.get("created_at"),
     )
 
+# ✅ FIXED: Include difficulty when cleaning dish data
 def _clean_dish_data(dish_dict: dict) -> dict:
     cleaned = {}
     # bắt buộc
     for k in ["name", "cooking_time", "ingredients"]:
         if k in dish_dict and dish_dict[k] not in (None, "", [], {}):
             cleaned[k] = dish_dict[k]
-    # tùy chọn (thay image_b64/image_mime bằng image_url)
-    for k in ["image_url", "creator_id", "recipe_id"]:
+    # ✅ FIXED: Add difficulty to optional fields
+    for k in ["image_url", "creator_id", "recipe_id", "difficulty"]:  # ✅ ADDED difficulty
         if k in dish_dict and dish_dict[k] not in (None, "", [], {}):
             cleaned[k] = dish_dict[k]
     # mặc định
@@ -118,14 +122,14 @@ async def upload_image_to_cloudinary(image_b64: str, image_mime: str, folder: st
         
         # Upload to Cloudinary sử dụng config đã set
         upload_result = cloudinary.uploader.upload(
-    image_data,
-    folder=folder,
-    resource_type="image",
-    transformation=[
-        {"quality": "auto:good"},
-        {"fetch_format": "auto"}
-    ]
-)
+            image_data,
+            folder=folder,
+            resource_type="image",
+            transformation=[
+                {"quality": "auto:good"},
+                {"fetch_format": "auto"}
+            ]
+        )
         
         logging.info(f"Successfully uploaded image: {upload_result['secure_url']}")
         return upload_result["secure_url"]
@@ -164,7 +168,7 @@ def get_optimized_image_url(public_id: str, width: int = None, height: int = Non
         logging.error(f"Failed to generate optimized URL: {str(e)}")
         return public_id  # Fallback to original URL
 
-# Tạo món (FE gửi JSON có image_b64/image_mime)
+# ✅ FIXED: Tạo món (FE gửi JSON có image_b64/image_mime) - ADD difficulty
 @router.post("/", response_model=DishOut)
 async def create_dish(dish: DishIn, decoded=Depends(get_current_user)):
     user_email = extract_user_email(decoded)
@@ -181,11 +185,13 @@ async def create_dish(dish: DishIn, decoded=Depends(get_current_user)):
             folder="dishes"
         )
 
+    # ✅ FIXED: Include difficulty in dish data
     new_doc = _clean_dish_data({
         "name": payload["name"],
         "cooking_time": payload["cooking_time"],
         "ingredients": payload.get("ingredients", []),
-        "image_url": image_url,  # Lưu URL thay vì base64
+        "difficulty": payload.get("difficulty", "easy"),  # ✅ ADDED: Save difficulty to dish
+        "image_url": image_url,
         "creator_id": str(user["_id"]),
     })
 
@@ -200,7 +206,7 @@ async def create_dish(dish: DishIn, decoded=Depends(get_current_user)):
         average_rating=new_doc.get("average_rating", 0.0),
     )
 
-# Tạo dish + recipe (upload ảnh lên Cloudinary)
+# ✅ FIXED: Tạo dish + recipe - Save difficulty to BOTH dish and recipe
 @router.post("/with-recipe", response_model=DishWithRecipeOut)
 async def create_dish_with_recipe(data: DishWithRecipeIn, decoded=Depends(get_current_user)):
     user_email = extract_user_email(decoded)
@@ -213,6 +219,9 @@ async def create_dish_with_recipe(data: DishWithRecipeIn, decoded=Depends(get_cu
         "Khó": "hard"
     }
 
+    # ✅ CRITICAL: Get normalized difficulty
+    normalized_difficulty = difficulty_map.get(data.difficulty, data.difficulty.lower())
+    
     image_b64 = getattr(data, "image_b64", None)
     image_mime = getattr(data, "image_mime", None)
     
@@ -225,11 +234,13 @@ async def create_dish_with_recipe(data: DishWithRecipeIn, decoded=Depends(get_cu
             folder="dishes"
         )
 
+    # ✅ FIXED: Save difficulty to DISH (not just recipe)
     dish_doc = _clean_dish_data({
         "name": data.name,
         "ingredients": data.ingredients,
         "cooking_time": data.cooking_time,
-        "image_url": image_url,  # Lưu URL thay vì base64
+        "difficulty": normalized_difficulty,  # ✅ CRITICAL: Save difficulty to dish
+        "image_url": image_url,
         "creator_id": str(user["_id"]),
     })
     
@@ -239,17 +250,18 @@ async def create_dish_with_recipe(data: DishWithRecipeIn, decoded=Depends(get_cu
 
     dish_id = str(dish_result.inserted_id)
 
+    # ✅ Also save difficulty to recipe (for consistency)
     recipe_doc = {
         "name": data.recipe_name or f"Cách làm {data.name}",
         "description": data.recipe_description or f"Hướng dẫn làm {data.name}",
         "ingredients": data.recipe_ingredients or data.ingredients,
-        "difficulty": difficulty_map.get(data.difficulty, data.difficulty.lower()),
+        "difficulty": normalized_difficulty,  # ✅ Also save to recipe
         "instructions": data.instructions,
         "dish_id": dish_id,
         "created_by": user_email,
         "ratings": [],
         "average_rating": 0.0,
-        "image_url": image_url,  # Lưu URL thay vì base64
+        "image_url": image_url,
         "created_at": datetime.utcnow(),
     }
     
@@ -272,7 +284,7 @@ async def create_dish_with_recipe(data: DishWithRecipeIn, decoded=Depends(get_cu
         message=f"Món '{data.name}' và công thức nấu ăn đã được tạo thành công!"
     )
 
-# List
+# List - KHÔNG CẦN SỬA vì đã có difficulty trong dish
 @router.get("/", response_model=List[DishDetailOut])
 async def get_dishes(limit: int = 20, skip: int = 0):
     cursor = dishes_collection.find(
@@ -281,7 +293,7 @@ async def get_dishes(limit: int = 20, skip: int = 0):
     docs = await cursor.to_list(length=limit)
     return [_to_detail_out(d) for d in docs]
 
-# Gợi ý hôm nay
+# Gợi ý hôm nay - KHÔNG CẦN SỬA
 @router.get("/suggest/today", response_model=List[DishDetailOut])
 async def suggest_today():
     docs = await dishes_collection.find(
@@ -312,9 +324,8 @@ async def get_random_dishes(limit: int = 3):
         ).sort("created_at", -1).limit(limit)
         docs = await cursor.to_list(length=limit)
         return [_to_detail_out(d) for d in docs]
-    
 
-# Chi tiết dish (1 cá nhân)
+# Chi tiết dish (1 cá nhân) - KHÔNG CẦN SỬA
 @router.get("/{dish_id}", response_model=DishDetailOut)
 async def get_dish_detail(dish_id: str):
     d = await dishes_collection.find_one({"_id": ObjectId(dish_id)})
@@ -322,8 +333,7 @@ async def get_dish_detail(dish_id: str):
         raise HTTPException(status_code=404, detail="Dish not found")
     return _to_detail_out(d)
 
-
-#chi tiết dish cho personalscreen
+# My dishes - KHÔNG CẦN SỬA
 @router.get("/my-dishes", response_model=List[DishDetailOut])
 async def get_my_dishes(
     limit: int = 10,
@@ -337,7 +347,6 @@ async def get_my_dishes(
     
     # Debug log
     print(f"Fetching dishes for user: {user_id} (email: {user_email})")
-    
 
     query_filter = {
         "$or": [
@@ -394,8 +403,7 @@ async def get_dishes(
     
     return [_to_detail_out(dish) for dish in dishes]
 
-
-# Chi tiết dish + recipe
+# Chi tiết dish + recipe - KHÔNG CẦN SỬA
 @router.get("/{dish_id}/with-recipe", response_model=DishWithRecipeDetailOut)
 async def get_dish_with_recipe(dish_id: str):
     dish = await dishes_collection.find_one({"_id": ObjectId(dish_id)})
@@ -415,7 +423,7 @@ async def get_dish_with_recipe(dish_id: str):
                 difficulty=r.get("difficulty", ""),
                 instructions=r.get("instructions", []),
                 average_rating=float(r.get("average_rating", 0.0)),
-                image_url=r.get("image_url"),  # Thay đổi từ image_b64 sang image_url
+                image_url=r.get("image_url"),
                 created_by=r.get("created_by"),
                 dish_id=r.get("dish_id"),
                 ratings=r.get("ratings", []),
@@ -427,7 +435,7 @@ async def get_dish_with_recipe(dish_id: str):
         recipe=recipe
     )
 
-# Đánh giá
+# Đánh giá - KHÔNG CẦN SỬA
 @router.post("/{dish_id}/rate")
 async def rate_dish(dish_id: str, rating: int, decoded=Depends(get_current_user)):
     if rating < 1 or rating > 5:
@@ -444,9 +452,7 @@ async def rate_dish(dish_id: str, rating: int, decoded=Depends(get_current_user)
     )
     return {"msg": "Rating added", "average_rating": avg}
 
-
-
-# Yêu thích
+# Yêu thích - KHÔNG CẦN SỬA
 @router.post("/{dish_id}/toggle-favorite")
 async def toggle_favorite_dish(dish_id: str, decoded=Depends(get_current_user)):
     user_email = decoded.get("email")
@@ -469,7 +475,6 @@ async def toggle_favorite_dish(dish_id: str, decoded=Depends(get_current_user)):
             {"$addToSet": {"favorite_dishes": dish_id_str}}
         )
         return {"isFavorite": True}
-    
 
 @router.post("/check-favorites", response_model=Dict[str, bool])
 async def check_favorites(request: CheckFavoritesRequest, decoded=Depends(get_current_user)):
@@ -498,8 +503,7 @@ async def check_favorites(request: CheckFavoritesRequest, decoded=Depends(get_cu
         logging.error(f"Error checking favorites: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to check favorites: {str(e)}")
 
-
-# Cleanup - cập nhật để xóa cả image_b64 fields cũ
+# ✅ FIXED: Cleanup - cập nhật để xóa cả image_b64 fields cũ
 @router.post("/admin/cleanup")
 async def cleanup_dishes(decoded=Depends(get_current_user)):
     # Xóa dishes không hợp lệ
@@ -527,6 +531,43 @@ async def cleanup_dishes(decoded=Depends(get_current_user)):
         "dishes_migrated": migration_res.modified_count,
         "recipes_migrated": recipe_migration_res.modified_count,
         "message": "Cleanup and migration completed"
+    }
+
+# ✅ NEW: Migration endpoint để copy difficulty từ recipe sang dish
+@router.post("/admin/migrate-difficulty")
+async def migrate_difficulty_to_dishes(decoded=Depends(get_current_user)):
+    """
+    Migrate existing dishes: copy difficulty từ recipe sang dish
+    Để fix những món cũ bị thiếu difficulty
+    """
+    migrated_count = 0
+    
+    # Tìm tất cả dishes có recipe_id nhưng chưa có difficulty
+    dishes_cursor = dishes_collection.find({
+        "recipe_id": {"$exists": True, "$ne": None},
+        "difficulty": {"$exists": False}  # Chưa có difficulty
+    })
+    
+    async for dish in dishes_cursor:
+        try:
+            recipe_id = dish.get("recipe_id")
+            if recipe_id:
+                # Lấy recipe tương ứng
+                recipe = await recipe_collection.find_one({"_id": ObjectId(recipe_id)})
+                if recipe and recipe.get("difficulty"):
+                    # Copy difficulty từ recipe sang dish
+                    await dishes_collection.update_one(
+                        {"_id": dish["_id"]},
+                        {"$set": {"difficulty": recipe["difficulty"]}}
+                    )
+                    migrated_count += 1
+                    logging.info(f"Migrated difficulty '{recipe['difficulty']}' for dish: {dish.get('name')}")
+        except Exception as e:
+            logging.error(f"Failed to migrate dish {dish.get('_id')}: {str(e)}")
+    
+    return {
+        "migrated_count": migrated_count,
+        "message": f"Successfully migrated difficulty for {migrated_count} dishes"
     }
 
 # Utility endpoint để migrate existing data
@@ -587,41 +628,3 @@ async def migrate_existing_images(decoded=Depends(get_current_user)):
         "migrated_recipes": migrated_recipes,
         "message": "Image migration completed"
     }
-
-
-@router.post("/dishes/{dish_id}/view")
-async def log_dish_view(dish_id: str, decoded=Depends(get_current_user)):
-    """Log khi user xem chi tiết một món ăn"""
-    uid = decoded["uid"]
-    now = datetime.now(timezone.utc)
-
-    doc = {
-        "type": "dish",
-        "id": dish_id,
-        "name": "",
-        "image": "",
-        "ts": now,
-    }
-
-    await user_activity_col.update_one(
-        {"user_id": uid},
-        {"$pull": {"viewed_dishes_and_users": {"type": "dish", "id": dish_id}}},
-        upsert=True
-    )
-
-    await user_activity_col.update_one(
-        {"user_id": uid},
-        {
-            "$push": {
-                "viewed_dishes_and_users": {
-                    "$each": [doc],
-                    "$position": 0,
-                    "$slice": MAX_HISTORY
-                }
-            },
-            "$set": {"updated_at": now}
-        },
-        upsert=True
-    )
-
-    return {"ok": True, "dish_id": dish_id}
