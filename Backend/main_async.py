@@ -47,9 +47,9 @@ user_preferences_col = db["user_preferences"]
 app = FastAPI()
 
 # Include các routers từ routes
-from routes import user_route, dish_route, recipe_route, search_route
+from routes import user_route, dish_route, recipe_route, search_route,comment_route
 from core.auth.dependencies import get_current_user
-
+app.include_router(comment_route.router)
 app.include_router(user_route.router, prefix="/users", tags=["Users"])
 app.include_router(dish_route.router, prefix="/dishes", tags=["Dishes"])
 app.include_router(recipe_route.router, prefix="/recipes", tags=["Recipes"])
